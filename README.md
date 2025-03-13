@@ -9,10 +9,17 @@ This project implements reinforcement learning principles in Go, focusing on:
 - Reward system implementation
 - Environment simulation
 
+## Quick Start
+```bash
+# Run the window demo
+go run cmd/window/main.go
+```
+
 ## Project Structure
 ```
 .
 ├── cmd/           # Command-line applications
+│   └── window/   # Window demo application
 ├── internal/      # Private application code
 ├── pkg/          # Public library code
 │   ├── agent/    # Agent implementations
@@ -41,6 +48,7 @@ Please read our [rules.md](rules.md) for detailed development guidelines and req
 ## Requirements
 - Go 1.21 or higher
 - Dependencies managed via Go modules
+- [Ebiten](https://github.com/hajimehoshi/ebiten) v2.8.6 (for window rendering)
 
 ## License
 See [LICENSE](LICENSE) file for details.
