@@ -1,74 +1,103 @@
 # Development Rules and Guidelines
 
-## Golang
+## Core Development Tools
 * use gofmt
 * use goimports
 * use govet
 * use golint
 * use golangci-lint
 
-## simulation
-* use random seed that we can configure
-
 ## Core Principles
 1. **State Management**
+   - Implement immutable state patterns for thread safety
+   - Use DAG-based system representation (input/hidden/output nodes)
    - All state changes must be explicit and trackable
-   - Use immutable state patterns where possible
-   - Implement clear state observation mechanisms
+   - Implement comprehensive state logging
+   - Thread-safe state transitions
 
 2. **Action Space**
-   - Define clear interfaces for all possible actions
-   - Actions must be deterministic
+   - Force application interface (-5N to +5N)
+   - All actions must be deterministic
+   - Implement force clamping and validation
+   - Clear state-action-reward pipeline
    - Each action must return both a new state and a reward signal
 
-3. **Reward System**
-   - All rewards must be quantifiable
-   - Implement both immediate and delayed reward mechanisms
-   - Keep reward calculations consistent and documented
+3. **Control Strategy**
+   - Classical control approach (vs original neural network implementation)
+   - Progressive complexity: start with minimal parameters
+   - Clear stage separation for validation
+   - Deterministic behavior over learned responses
 
 4. **Code Organization**
    - Follow standard Go project layout
    - Use interfaces for flexibility and testing
-   - Maintain clear separation between environment, agent, and policy logic
+   - Maintain clear separation between components
+   - Document architectural decisions in ADRs
 
-## Angle Conventions
+## Physics Implementation
 
-- All angles in the system are normalized to the range [0, 2π]
-- The pendulum's angle is measured clockwise from the upward vertical position
-- 0 represents the pendulum pointing upward
-- π represents the pendulum pointing downward
-- π/2 represents the pendulum pointing rightward
-- 3π/2 represents the pendulum pointing leftward
+### Angle Conventions
+- All angles normalized to [0, 2π]
+- Measured clockwise from upward vertical
+- 0 = upward pointing
+- π = downward pointing
+- π/2 = rightward pointing
+- 3π/2 = leftward pointing
+
+### Simulation Requirements
+- Configurable random seed support
+- Full nonlinear equations implementation
+- Proper collision detection (track bounds)
+- Deterministic replay capability
+- State transition logging
 
 ## Testing Requirements
-1. Each component must have:
-   - Unit tests for core logic
-   - Integration tests for state transitions
-   - Performance benchmarks for critical paths
+1. **Unit Testing**
+   - Core component unit tests
+   - State transition validation
+   - Action space verification
+   - Reward calculation tests
 
-2. Simulation requirements:
-   - Must support deterministic replay
-   - Must log all state transitions
-   - Must support different random seeds
+2. **Integration Testing**
+   - Component interaction tests
+   - Full system validation
+   - Deterministic replay tests
+   - Random seed testing
+
+3. **Performance Testing**
+   - Critical path benchmarks
+   - Memory allocation profiling
+   - Real-time performance validation
+   - Stage-by-stage validation
 
 ## Performance Guidelines
 1. **Memory Management**
+   - Use immutable patterns for thread safety
+   - Implement object pooling for frequent allocations
    - Minimize allocations in hot paths
-   - Use object pooling for frequently created/destroyed objects
-   - Profile memory usage regularly
+   - Regular memory usage monitoring
 
 2. **Concurrency**
-   - Use goroutines responsibly
-   - Implement proper error handling for concurrent operations
+   - Responsible goroutine management
+   - Thread-safe state transitions
+   - Proper error handling
    - Document thread safety guarantees
 
-## Documentation
-1. All public APIs must have:
-   - Clear documentation with examples
+## Documentation Requirements
+1. **Code Documentation**
+   - Clear API documentation with examples
    - Usage constraints and limitations
    - Performance characteristics
+   - Core types documentation
 
-2. Architecture decisions must be documented in:
-   - ADR (Architecture Decision Records) in docs/ARCHITECTURE.md
+2. **Architecture Documentation**
+   - ADRs in docs/ARCHITECTURE.md
    - Performance impact analysis
-   - Trade-off considerations
+   - Implementation trade-offs
+   - Reference implementation comparisons
+
+3. **Progress Tracking**
+   - Current status in docs/PROGRESS.md
+   - Completed components
+   - In-progress features
+   - Next steps and priorities
