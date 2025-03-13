@@ -1,5 +1,15 @@
 # Development Rules and Guidelines
 
+## Golang
+* use gofmt
+* use goimports
+* use govet
+* use golint
+* use golangci-lint
+
+## simulation
+* use random seed that we can configure
+
 ## Core Principles
 1. **State Management**
    - All state changes must be explicit and trackable
