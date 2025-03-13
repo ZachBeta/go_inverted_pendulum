@@ -35,25 +35,15 @@ func NewDefaultConfig() Config {
 	}
 }
 
-// NormalizeAngle ensures angle stays within -π to π
+// NormalizeAngle ensures angle stays within [0, 2π) while maintaining continuity
 func NormalizeAngle(angle float64) float64 {
-	// Handle exact multiples of π
-	if math.Abs(math.Mod(angle, math.Pi)) < 1e-10 {
-		if math.Mod(angle/math.Pi, 2) == 0 {
-			return 0
-		}
-		if angle > 0 {
-			return -math.Pi
-		}
-		return -math.Pi
-	}
-
-	// General case
+	// Get the raw modulo
 	normalized := math.Mod(angle, 2*math.Pi)
-	if normalized > math.Pi {
-		normalized -= 2 * math.Pi
-	} else if normalized < -math.Pi {
+	
+	// Handle negative angles by wrapping to [0, 2π)
+	if normalized < 0 {
 		normalized += 2 * math.Pi
 	}
+	
 	return normalized
 }

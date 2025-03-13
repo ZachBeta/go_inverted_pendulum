@@ -85,26 +85,113 @@ func TestPendulumStep(t *testing.T) {
 
 func TestNormalizeAngle(t *testing.T) {
 	tests := []struct {
+		desc     string
 		angle    float64
 		expected float64
 	}{
-		{0, 0},
-		{math.Pi, math.Pi},
-		{-math.Pi, -math.Pi},
-		{3 * math.Pi, -math.Pi},
-		{-3 * math.Pi, -math.Pi},
-		{2 * math.Pi, 0},
-		{-2 * math.Pi, 0},
-		{9.42, -2.86}, // 3π - small offset
-		{-9.42, 2.86}, // -3π + small offset
+		// Basic range [0, 2π]
+		{
+			desc:     "zero remains zero",
+			angle:    0,
+			expected: 0,
+		},
+		{
+			desc:     "π/4 remains π/4",
+			angle:    math.Pi / 4,
+			expected: math.Pi / 4,
+		},
+		{
+			desc:     "π/2 remains π/2",
+			angle:    math.Pi / 2,
+			expected: math.Pi / 2,
+		},
+		{
+			desc:     "3π/4 remains 3π/4",
+			angle:    3 * math.Pi / 4,
+			expected: 3 * math.Pi / 4,
+		},
+		{
+			desc:     "π remains π",
+			angle:    math.Pi,
+			expected: math.Pi,
+		},
+		{
+			desc:     "5π/4 remains 5π/4",
+			angle:    5 * math.Pi / 4,
+			expected: 5 * math.Pi / 4,
+		},
+		{
+			desc:     "3π/2 remains 3π/2",
+			angle:    3 * math.Pi / 2,
+			expected: 3 * math.Pi / 2,
+		},
+		{
+			desc:     "7π/4 remains 7π/4",
+			angle:    7 * math.Pi / 4,
+			expected: 7 * math.Pi / 4,
+		},
+		{
+			desc:     "2π wraps to 0",
+			angle:    2 * math.Pi,
+			expected: 0,
+		},
+		// Beyond 2π
+		{
+			desc:     "5π/2 wraps to π/2",
+			angle:    5 * math.Pi / 2,
+			expected: math.Pi / 2,
+		},
+		{
+			desc:     "3π wraps to π",
+			angle:    3 * math.Pi,
+			expected: math.Pi,
+		},
+		{
+			desc:     "slightly over 3π wraps to slightly over π",
+			angle:    9.42, // ~3π + 0.28
+			expected: 3.1368146928204137,
+		},
+		// Negative angles
+		{
+			desc:     "-π/2 wraps to 3π/2",
+			angle:    -math.Pi / 2,
+			expected: 3 * math.Pi / 2,
+		},
+		{
+			desc:     "-π wraps to π",
+			angle:    -math.Pi,
+			expected: math.Pi,
+		},
+		{
+			desc:     "-3π/2 wraps to π/2",
+			angle:    -3 * math.Pi / 2,
+			expected: math.Pi / 2,
+		},
+		{
+			desc:     "-2π wraps to 0",
+			angle:    -2 * math.Pi,
+			expected: 0,
+		},
+		{
+			desc:     "-3π wraps to π",
+			angle:    -3 * math.Pi,
+			expected: math.Pi,
+		},
+		{
+			desc:     "slightly under -3π wraps to slightly over π",
+			angle:    -9.42, // ~-3π - 0.28
+			expected: 3.1368146928204137,
+		},
 	}
 
 	for _, tt := range tests {
-		result := NormalizeAngle(tt.angle)
-		if math.Abs(result-tt.expected) > 1e-2 {
-			t.Errorf("NormalizeAngle(%.2f) = %.2f; want %.2f", 
-				tt.angle, result, tt.expected)
-		}
+		t.Run(tt.desc, func(t *testing.T) {
+			result := NormalizeAngle(tt.angle)
+			if math.Abs(result-tt.expected) > 1e-2 {
+				t.Errorf("NormalizeAngle(%v) = %v; want %v", 
+					tt.angle, result, tt.expected)
+			}
+		})
 	}
 }
 

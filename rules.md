@@ -21,6 +21,15 @@
    - Use interfaces for flexibility and testing
    - Maintain clear separation between environment, agent, and policy logic
 
+## Angle Conventions
+
+- All angles in the system are normalized to the range [0, 2π]
+- The pendulum's angle is measured clockwise from the upward vertical position
+- 0 represents the pendulum pointing upward
+- π represents the pendulum pointing downward
+- π/2 represents the pendulum pointing rightward
+- 3π/2 represents the pendulum pointing leftward
+
 ## Testing Requirements
 1. Each component must have:
    - Unit tests for core logic
