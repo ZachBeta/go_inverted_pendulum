@@ -1,11 +1,14 @@
 # Development Rules and Guidelines
 
 ## Core Development Tools
-* use gofmt
-* use goimports
-* use govet
-* use golint
-* use golangci-lint
+* use gofmt and similar tools where appropriate
+   * goimports
+   * govet
+   * golint
+   * golangci-lint
+* give visibility into the neural network
+* add debugging info display on renderer
+* log debugging information that's displayed on screen to a file as well
 
 ## Core Principles
 1. **State Management**
