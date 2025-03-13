@@ -53,7 +53,7 @@ For current project status and next steps, see [PROGRESS.md](docs/PROGRESS.md).
 - [Ebiten](https://github.com/hajimehoshi/ebiten) v2.8.6 (for window rendering)
 
 ## References
-For educational materials and implementation insights, see our [reference documentation](docs/references/README.md).
+For educational materials and implementation insights, see our [reference documentation](docs/ARCHITECTURE.md).
 
 ## License
 See [LICENSE](LICENSE) file for details.

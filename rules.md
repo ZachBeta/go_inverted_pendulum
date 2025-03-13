@@ -69,6 +69,6 @@
    - Performance characteristics
 
 2. Architecture decisions must be documented in:
-   - ADR (Architecture Decision Records)
+   - ADR (Architecture Decision Records) in docs/ARCHITECTURE.md
    - Performance impact analysis
    - Trade-off considerations
