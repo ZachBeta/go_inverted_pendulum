@@ -43,7 +43,7 @@ go build ./examples/...
 ```
 
 ## Development
-Please read our [rules.md](rules.md) for detailed development guidelines and requirements.
+Please read our [RULES.md](RULES.md) for detailed development guidelines and requirements.
 
 For current project status and next steps, see [PROGRESS.md](docs/PROGRESS.md).
 
