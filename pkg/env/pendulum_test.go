@@ -218,3 +218,112 @@ func TestTrackBounds(t *testing.T) {
 	
 	t.Error("Expected to hit track bounds but didn't")
 }
+
+func TestDeterministicReplay(t *testing.T) {
+	config := NewDefaultConfig()
+	forces := []float64{2.0, -3.0, 4.0, -2.0, 1.0}
+	
+	// First run
+	p1 := NewPendulum(config, nil)
+	var states1 []State
+	for _, force := range forces {
+		state, err := p1.Step(force)
+		if err != nil {
+			t.Fatalf("First run failed: %v", err)
+		}
+		states1 = append(states1, state)
+	}
+
+	// Second run with same inputs
+	p2 := NewPendulum(config, nil)
+	var states2 []State
+	for _, force := range forces {
+		state, err := p2.Step(force)
+		if err != nil {
+			t.Fatalf("Second run failed: %v", err)
+		}
+		states2 = append(states2, state)
+	}
+
+	// Compare states
+	for i := range states1 {
+		if states1[i] != states2[i] {
+			t.Errorf("Non-deterministic behavior at step %d:\nFirst run: %+v\nSecond run: %+v",
+				i, states1[i], states2[i])
+		}
+	}
+}
+
+func TestStateTransitions(t *testing.T) {
+	config := NewDefaultConfig()
+	p := NewPendulum(config, nil)
+	
+	// Test state transitions with constant force
+	force := 3.0
+	var prevState State
+	var workDone float64 // Track work done by external force
+	
+	for i := 0; i < 10; i++ {
+		state, err := p.Step(force)
+		if err != nil {
+			t.Fatalf("Step %d failed: %v", i, err)
+		}
+
+		if i > 0 {
+			// Verify time step increment
+			if state.TimeStep != prevState.TimeStep+1 {
+				t.Errorf("Step %d: TimeStep not incremented correctly", i)
+			}
+
+			// Verify cart movement direction matches force
+			if force > 0 && state.CartVelocity <= prevState.CartVelocity {
+				t.Errorf("Step %d: Cart velocity not increasing with positive force", i)
+			}
+
+			// Calculate work done by force (F * dx)
+			dx := state.CartPosition - prevState.CartPosition
+			workDone += force * dx
+
+			// Verify energy conservation including work done
+			prevEnergy := calculateSystemEnergy(prevState)
+			currentEnergy := calculateSystemEnergy(state)
+			energyDiff := math.Abs((currentEnergy - prevEnergy) - (force * dx))
+			if energyDiff > 1e-2 {
+				t.Errorf("Step %d: Energy not conserved (accounting for work), diff: %v", i, energyDiff)
+			}
+		}
+		
+		prevState = state
+	}
+}
+
+func calculateSystemEnergy(s State) float64 {
+	config := NewDefaultConfig()
+	// Kinetic + Potential energy
+	cartKE := 0.5 * config.CartMass * s.CartVelocity * s.CartVelocity
+	pendulumKE := 0.5 * config.PendulumMass * s.AngularVel * s.AngularVel
+	potentialE := config.PendulumMass * config.Gravity * (1 - math.Cos(s.AngleRadians))
+	return cartKE + pendulumKE + potentialE
+}
+
+func BenchmarkPendulumStep(b *testing.B) {
+	config := NewDefaultConfig()
+	p := NewPendulum(config, nil)
+	force := 2.0
+
+	b.Run("single_step", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_, _ = p.Step(force)
+		}
+	})
+
+	b.Run("state_transitions", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			p := NewPendulum(config, nil)
+			for j := 0; j < 100; j++ {
+				_, _ = p.Step(force)
+			}
+		}
+	})
+}
