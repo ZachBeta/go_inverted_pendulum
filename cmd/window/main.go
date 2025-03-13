@@ -20,6 +20,25 @@ const (
 type Game struct {
 	pendulum *env.Pendulum
 	logger   *log.Logger
+	cartImg  *ebiten.Image
+	bobImg   *ebiten.Image
+}
+
+func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
+	// Create cart image
+	cartImg := ebiten.NewImage(50, 30)
+	cartImg.Fill(color.RGBA{100, 100, 255, 255})
+
+	// Create pendulum bob image
+	bobImg := ebiten.NewImage(20, 20)
+	bobImg.Fill(color.RGBA{255, 100, 100, 255})
+
+	return &Game{
+		pendulum: pendulum,
+		logger:   logger,
+		cartImg:  cartImg,
+		bobImg:   bobImg,
+	}
 }
 
 func (g *Game) Update() error {
@@ -52,17 +71,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DrawLine(screen, 0, trackY, float64(screenWidth), trackY, color.White)
 	
 	// Calculate cart position in screen coordinates
-	cartWidth := 50.0
-	cartHeight := 30.0
+	cartWidth := float64(g.cartImg.Bounds().Dx())
+	cartHeight := float64(g.cartImg.Bounds().Dy())
 	cartX := float64(screenWidth)/2 + state.CartPosition*scale
 	
 	// Draw cart
-	ebitenutil.DrawRect(screen, 
-		cartX-cartWidth/2, 
-		trackY-cartHeight,
-		cartWidth, 
-		cartHeight,
-		color.RGBA{100, 100, 255, 255})
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(cartX-cartWidth/2, trackY-cartHeight)
+	screen.DrawImage(g.cartImg, op)
 	
 	// Calculate pendulum end point
 	pendulumLength := g.pendulum.GetConfig().Length * scale
@@ -78,8 +94,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		color.RGBA{255, 100, 100, 255})
 	
 	// Draw pendulum bob
-	bobRadius := 10.0
-	ebitenutil.DrawCircle(screen, endX, endY, bobRadius, color.RGBA{255, 100, 100, 255})
+	bobWidth := float64(g.bobImg.Bounds().Dx())
+	bobHeight := float64(g.bobImg.Bounds().Dy())
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(endX-bobWidth/2, endY-bobHeight/2)
+	screen.DrawImage(g.bobImg, op)
 	
 	// Draw debug info
 	debugText := fmt.Sprintf(
@@ -107,10 +126,7 @@ func main() {
 	pendulum := env.NewPendulum(config, logger)
 	
 	// Create game
-	game := &Game{
-		pendulum: pendulum,
-		logger:   logger,
-	}
+	game := NewGame(pendulum, logger)
 	
 	// Set up window
 	ebiten.SetWindowSize(screenWidth, screenHeight)
