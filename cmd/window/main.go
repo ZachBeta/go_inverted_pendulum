@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"errors"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
+	"github.com/zachbeta/go_inverted_pendulum/pkg/neural"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 
 type Game struct {
 	pendulum *env.Pendulum
+	network  *neural.Network
 	logger   *log.Logger
 	cartImg  *ebiten.Image
 	bobImg   *ebiten.Image
@@ -35,6 +38,7 @@ func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
 
 	return &Game{
 		pendulum: pendulum,
+		network:  neural.NewNetwork(),
 		logger:   logger,
 		cartImg:  cartImg,
 		bobImg:   bobImg,
@@ -42,23 +46,28 @@ func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
 }
 
 func (g *Game) Update() error {
-	// For now, just apply a constant force
-	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		_, err := g.pendulum.Step(5.0)
-		if err != nil {
-			g.logger.Printf("Error stepping simulation: %v\n", err)
-		}
-	} else if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		_, err := g.pendulum.Step(-5.0)
-		if err != nil {
-			g.logger.Printf("Error stepping simulation: %v\n", err)
-		}
-	} else {
-		_, err := g.pendulum.Step(0)
-		if err != nil {
-			g.logger.Printf("Error stepping simulation: %v\n", err)
-		}
+	// Check for window close
+	if ebiten.IsWindowBeingClosed() {
+		return errors.New("window closed")
 	}
+
+	// Get current state
+	state := g.pendulum.GetState()
+	
+	// Get force from network
+	force := g.network.Forward(state)
+	g.logger.Printf("Network force: %.2f N for angle: %.2f rad\n", force, state.AngleRadians)
+	
+	// Apply force
+	_, err := g.pendulum.Step(force)
+	if err != nil {
+		g.logger.Printf("Error stepping simulation: %v\n", err)
+		// Reset pendulum near center with current angle
+		config := g.pendulum.GetConfig()
+		g.pendulum = env.NewPendulum(config, g.logger)
+		// The pendulum's NewPendulum will initialize with default state
+	}
+
 	return nil
 }
 
@@ -101,15 +110,24 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.DrawImage(g.bobImg, op)
 	
 	// Draw debug info
+	weights := g.network.GetWeights()
 	debugText := fmt.Sprintf(
-		"Cart Position: %.2f m\n"+
-		"Cart Velocity: %.2f m/s\n"+
-		"Pendulum Angle: %.2f rad\n"+
-		"Angular Velocity: %.2f rad/s",
+		"Network Control\n\n"+
+		"State:\n"+
+		"  Cart Position: %.2f m\n"+
+		"  Cart Velocity: %.2f m/s\n"+
+		"  Angle: %.2f rad (%.1f°)\n"+
+		"  Angular Vel: %.2f rad/s\n\n"+
+		"Network Weights:\n"+
+		"  Angle: %.4f\n"+
+		"  Angular Vel: %.4f\n"+
+		"  Bias: %.4f",
 		state.CartPosition,
 		state.CartVelocity,
 		state.AngleRadians,
-		state.AngularVel)
+		state.AngleRadians * 180 / math.Pi,
+		state.AngularVel,
+		weights[0], weights[1], weights[2])
 	ebitenutil.DebugPrint(screen, debugText)
 }
 
@@ -130,10 +148,14 @@ func main() {
 	
 	// Set up window
 	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("Inverted Pendulum Simulation")
+	ebiten.SetWindowTitle("Inverted Pendulum - Network Control")
 	
 	// Run game
 	if err := ebiten.RunGame(game); err != nil {
-		logger.Fatal(err)
+		if err.Error() == "window closed" {
+			logger.Println("Window closed normally")
+		} else {
+			logger.Printf("Game error: %v\n", err)
+		}
 	}
 }
