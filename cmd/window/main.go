@@ -26,9 +26,14 @@ const (
 	// Network visualization constants
 	networkPanelX = 10
 	networkPanelY = 10
-	networkPanelWidth = 200
-	networkPanelHeight = 150
+	networkPanelWidth = 250
+	networkPanelHeight = 200
 	nodeRadius = 15
+	
+	// Network layer positions
+	inputLayerX = networkPanelX + 40
+	hiddenLayerX = networkPanelX + networkPanelWidth/2
+	outputLayerX = networkPanelX + networkPanelWidth - 40
 )
 
 var (
@@ -218,49 +223,70 @@ func (g *Game) drawNetworkVisualization(screen *ebiten.Image, state env.State) {
 		color.RGBA{40, 40, 40, 230})
 
 	// Calculate node positions
-	inputY := float64(networkPanelY + networkPanelHeight/2)
-	hiddenX := float64(networkPanelX + networkPanelWidth/2)
-	hiddenY := inputY
-	outputX := float64(networkPanelX + networkPanelWidth - nodeRadius*2)
-	outputY := inputY
+	centerY := float64(networkPanelY + networkPanelHeight/2)
+	
+	// Input layer positions (spread vertically)
+	angleY := centerY - 25
+	velocityY := centerY + 25
+	
+	// Hidden layer position (center)
+	hiddenY := centerY
+	
+	// Output layer positions
+	outputY := centerY
 
-	// Draw connections
+	// Draw layer labels
+	text.Draw(screen, "Inputs", mplusNormalFont, inputLayerX-25, networkPanelY+20, color.White)
+	text.Draw(screen, "Hidden", mplusNormalFont, hiddenLayerX-25, networkPanelY+20, color.White)
+	text.Draw(screen, "Output", mplusNormalFont, outputLayerX-25, networkPanelY+20, color.White)
+
+	// Get network weights and current force
 	weights := g.network.GetWeights()
 	angleWeight := weights[0]
 	angularVelWeight := weights[1]
+	currentForce := g.pendulum.GetLastForce()
 
 	// Draw connections with thickness based on weight magnitude
 	drawWeightedConnection(screen, 
-		float64(networkPanelX+nodeRadius*2), inputY-nodeRadius,  // Angle input
-		hiddenX, hiddenY,
+		float64(inputLayerX), angleY,
+		float64(hiddenLayerX), hiddenY,
 		angleWeight)
 	drawWeightedConnection(screen, 
-		float64(networkPanelX+nodeRadius*2), inputY+nodeRadius,  // Angular velocity input
-		hiddenX, hiddenY,
+		float64(inputLayerX), velocityY,
+		float64(hiddenLayerX), hiddenY,
 		angularVelWeight)
 	drawWeightedConnection(screen, 
-		hiddenX, hiddenY,
-		outputX, outputY,
-		1.0) // Output connection always full strength
+		float64(hiddenLayerX), hiddenY,
+		float64(outputLayerX), outputY,
+		1.0)
 
-	// Draw nodes with activation colors
-	angleColor := getActivationColor(state.AngleRadians / math.Pi) // Normalize to [-1, 1]
-	velocityColor := getActivationColor(state.AngularVel / 10.0)   // Normalize assuming max ~10 rad/s
+	// Calculate node colors based on activations
+	angleColor := getActivationColor(state.AngleRadians / math.Pi)
+	velocityColor := getActivationColor(state.AngularVel / 10.0)
 	hiddenColor := getActivationColor(g.lastHiddenActivation)
-	outputColor := getActivationColor(g.pendulum.GetLastForce() / 5.0) // Normalize to [-1, 1]
+	outputColor := getActivationColor(currentForce / 5.0)
 
-	// Draw input nodes
-	drawNode(screen, float64(networkPanelX+nodeRadius*2), inputY-nodeRadius, "θ", angleColor)
-	drawNode(screen, float64(networkPanelX+nodeRadius*2), inputY+nodeRadius, "ω", velocityColor)
+	// Draw input nodes with labels
+	drawNode(screen, float64(inputLayerX), angleY, "θ", angleColor)
+	drawNode(screen, float64(inputLayerX), velocityY, "ω", velocityColor)
+	text.Draw(screen, fmt.Sprintf("%.2f°", state.AngleRadians*180/math.Pi), 
+		mplusNormalFont, inputLayerX+20, int(angleY)+5, color.White)
+	text.Draw(screen, fmt.Sprintf("%.2f rad/s", state.AngularVel), 
+		mplusNormalFont, inputLayerX+20, int(velocityY)+5, color.White)
 
-	// Draw hidden node
-	drawNode(screen, hiddenX, hiddenY, "H", hiddenColor)
+	// Draw hidden node with activation
+	drawNode(screen, float64(hiddenLayerX), hiddenY, "H", hiddenColor)
+	text.Draw(screen, fmt.Sprintf("%.2f", g.lastHiddenActivation), 
+		mplusNormalFont, hiddenLayerX-20, int(hiddenY)-20, color.White)
 
-	// Draw output node
-	drawNode(screen, outputX, outputY, "F", outputColor)
+	// Draw output node with force
+	drawNode(screen, float64(outputLayerX), outputY, "F", outputColor)
+	text.Draw(screen, fmt.Sprintf("%.1f N", currentForce), 
+		mplusNormalFont, outputLayerX-20, int(outputY)-20, color.White)
 
-	// Draw network title
-	ebitenutil.DebugPrintAt(screen, "Network Activity", networkPanelX+5, networkPanelY+5)
+	// Draw network title and description
+	text.Draw(screen, "Neural Network State", mplusNormalFont, 
+		networkPanelX+5, networkPanelY+15, color.White)
 }
 
 func drawWeightedConnection(screen *ebiten.Image, x1, y1, x2, y2, weight float64) {
