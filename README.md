@@ -1,11 +1,11 @@
-# Go Inverted Pendulum Classical Control Framework
+# Go Inverted Pendulum Neural Network Implementation
 
-A Go-based framework implementing classical control theory for the inverted pendulum problem, with a focus on deterministic behavior, performance, and maintainability.
+A Go-based framework implementing neural network control for the inverted pendulum problem, building directly on Pezzza's original approach with a focus on learning behaviors and performance.
 
 ## Overview
-This project implements classical control principles in Go, focusing on:
-- Immutable state management with DAG-based representation
-- Deterministic action space (-5N to +5N force control)
+This project implements neural network control in Go, focusing on:
+- Neural network architecture with DAG-based representation
+- Learned action space (-5N to +5N force control)
 - Real-time performance optimization
 - Environment simulation with accurate physics
 
@@ -51,9 +51,9 @@ go test ./...
 │   └── window/   # Window demo application (800x600)
 ├── internal/      # Private application code
 ├── pkg/          # Public library code
-│   ├── agent/    # Agent implementations
+│   ├── agent/    # Neural network agent implementations
 │   ├── env/      # Environment definitions
-│   ├── policy/   # Policy implementations
+│   ├── policy/   # Learning policy implementations
 │   └── reward/   # Reward system (in progress)
 ├── test/         # Additional test files
 ├── docs/         # Documentation
@@ -78,12 +78,12 @@ For current project status and next steps, see [PROGRESS.md](docs/PROGRESS.md).
 - [Ebiten](https://github.com/hajimehoshi/ebiten) v2.8.6 (for visualization)
 
 ## Implementation Details
-This project builds on Pezzza's original neural network implementation while taking a classical control approach. Key features:
-- Deterministic control vs learned behaviors
-- Immutable state patterns for thread safety
+This project extends Pezzza's original neural network implementation. Key features:
+- Three-node neural network architecture
+- Progressive learning approach
 - Real-time performance optimization
 - Comprehensive testing framework
-- Progressive complexity approach
+- Evolutionary architecture
 
 For implementation insights and video references, see our [architecture documentation](docs/ARCHITECTURE.md).
 
