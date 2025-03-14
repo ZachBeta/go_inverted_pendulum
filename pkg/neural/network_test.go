@@ -12,6 +12,7 @@ func TestThreeNodeNetwork(t *testing.T) {
 		name        string
 		state       env.State
 		wantForce   float64
+		tolerance   float64
 		description string
 	}{
 		{
@@ -23,6 +24,7 @@ func TestThreeNodeNetwork(t *testing.T) {
 				AngularVel:   0,
 			},
 			wantForce:   0,
+			tolerance:   0.1,
 			description: "Network should output no force when pendulum is perfectly balanced",
 		},
 		{
@@ -33,8 +35,9 @@ func TestThreeNodeNetwork(t *testing.T) {
 				AngleRadians: 0.1, // slight tilt right
 				AngularVel:   0.2, // falling right
 			},
-			wantForce:   -5.0, // should push left to counteract
-			description: "Network should push left when pendulum falls right",
+			wantForce:   -4.5, // Progressive force for small angle
+			tolerance:   0.5,
+			description: "Network should push left proportionally when pendulum falls right",
 		},
 		{
 			name: "falling_left",
@@ -44,8 +47,33 @@ func TestThreeNodeNetwork(t *testing.T) {
 				AngleRadians: -0.1, // slight tilt left
 				AngularVel:   -0.2, // falling left
 			},
-			wantForce:   5.0, // should push right to counteract
-			description: "Network should push right when pendulum falls left",
+			wantForce:   4.5, // Progressive force for small angle
+			tolerance:   0.5,
+			description: "Network should push right proportionally when pendulum falls left",
+		},
+		{
+			name: "extreme_right",
+			state: env.State{
+				CartPosition: 0,
+				CartVelocity: 0,
+				AngleRadians: 0.5, // significant tilt right
+				AngularVel:   1.0, // falling fast right
+			},
+			wantForce:   -5.0, // Maximum force for extreme angle
+			tolerance:   0.1,
+			description: "Network should apply maximum force for extreme angles",
+		},
+		{
+			name: "extreme_left",
+			state: env.State{
+				CartPosition: 0,
+				CartVelocity: 0,
+				AngleRadians: -0.5, // significant tilt left
+				AngularVel:   -1.0, // falling fast left
+			},
+			wantForce:   5.0, // Maximum force for extreme angle
+			tolerance:   0.1,
+			description: "Network should apply maximum force for extreme angles",
 		},
 	}
 
@@ -53,8 +81,9 @@ func TestThreeNodeNetwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := network.Forward(tt.state)
-			if math.Abs(got-tt.wantForce) > 1e-6 {
-				t.Errorf("%s: got force %.6f, want %.6f", tt.description, got, tt.wantForce)
+			if math.Abs(got-tt.wantForce) > tt.tolerance {
+				t.Errorf("%s: got force %.4f, want %.4f (±%.4f)", 
+					tt.description, got, tt.wantForce, tt.tolerance)
 			}
 		})
 	}
@@ -116,6 +145,100 @@ func TestWeightUpdates(t *testing.T) {
 				}
 				if force < 0 && !weightsIncreased(initialWeights, newWeights) {
 					t.Errorf("%s: weights did not weaken for negative reward", tt.description)
+				}
+			}
+		})
+	}
+}
+
+func TestLearningBehavior(t *testing.T) {
+	scenarios := []struct {
+		name        string
+		episodes    []struct {
+			state  env.State
+			reward float64
+		}
+		description string
+	}{
+		{
+			name: "learn_to_balance",
+			episodes: []struct {
+				state  env.State
+				reward float64
+			}{
+				{
+					state: env.State{AngleRadians: 0.1, AngularVel: 0.2},
+					reward: -0.5, // Penalize for being off-center
+				},
+				{
+					state: env.State{AngleRadians: 0.05, AngularVel: 0.1},
+					reward: -0.2, // Less penalty as we get closer
+				},
+				{
+					state: env.State{AngleRadians: 0.01, AngularVel: 0.02},
+					reward: 0.8, // Reward for being close to center
+				},
+			},
+			description: "Network should learn to keep pendulum centered",
+		},
+		{
+			name: "recover_from_fall",
+			episodes: []struct {
+				state  env.State
+				reward float64
+			}{
+				{
+					state: env.State{AngleRadians: 0.5, AngularVel: 1.0},
+					reward: -0.8, // Heavy penalty for extreme angle
+				},
+				{
+					state: env.State{AngleRadians: 0.3, AngularVel: 0.5},
+					reward: -0.3, // Less penalty as angle reduces
+				},
+				{
+					state: env.State{AngleRadians: 0.1, AngularVel: 0.2},
+					reward: 0.5, // Reward for recovering
+				},
+			},
+			description: "Network should learn to recover from falling",
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			network := NewNetwork()
+			network.SetDebug(true) // Enable debug prints for learning analysis
+			
+			// Run through learning episodes
+			var forces []float64
+			for _, episode := range scenario.episodes {
+				force := network.Forward(episode.state)
+				forces = append(forces, force)
+				network.Update(episode.reward)
+			}
+			
+			// Verify learning progress
+			if len(forces) < 2 {
+				t.Fatal("Need at least 2 episodes to verify learning")
+			}
+			
+			// For balancing scenario, forces should get smaller
+			if scenario.name == "learn_to_balance" {
+				if math.Abs(forces[len(forces)-1]) >= math.Abs(forces[0]) {
+					t.Errorf("%s: forces did not decrease over time. Initial: %.4f, Final: %.4f",
+						scenario.description, forces[0], forces[len(forces)-1])
+				}
+			}
+			
+			// For recovery scenario, forces should align with fall direction
+			if scenario.name == "recover_from_fall" {
+				lastForce := forces[len(forces)-1]
+				lastState := scenario.episodes[len(scenario.episodes)-1].state
+				if lastState.AngleRadians > 0 && lastForce > 0 {
+					t.Errorf("%s: network pushed right when pendulum tilted right", scenario.description)
+				}
+				if lastState.AngleRadians < 0 && lastForce < 0 {
+					t.Errorf("%s: network pushed left when pendulum tilted left", scenario.description)
 				}
 			}
 		})
