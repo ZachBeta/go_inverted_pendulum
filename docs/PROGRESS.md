@@ -1,7 +1,9 @@
 # Project Progress Tracking
 
 ## next steps
-* store the neural network in disk, so we can carry it between runs
+* optimize network training performance
+* improve reward function for faster learning
+* add visualization of training metrics
 
 ## Current Status (as of March 14, 2025)
 
@@ -21,6 +23,11 @@
 - Hidden layer implementation
 - Output layer (force decisions)
 - Weight initialization complete
+- Network state persistence (save/load)
+  - JSON-based state serialization
+  - Automatic directory creation
+  - Home directory storage (~/.inverted_pendulum)
+  - Keyboard shortcuts (S: save, L: load)
 
 #### 3. Action Space
 - Force application interface (-5N to +5N)

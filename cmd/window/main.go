@@ -3,9 +3,12 @@ package main
 import (
 	"errors"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
@@ -46,6 +49,7 @@ type Game struct {
 	ticks     int       // Track ticks within current episode
 	maxTicks  int       // Track best episode length
 	lastHiddenActivation float64 // Store last hidden layer activation
+	networkPath string   // Path to save/load network state
 }
 
 func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
@@ -59,6 +63,14 @@ func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
 		logger,
 	)
 
+	// Set up network save path in user's home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		logger.Printf("Failed to get home directory, using current directory: %v", err)
+		homeDir = "."
+	}
+	networkPath := filepath.Join(homeDir, ".inverted_pendulum", "network.json")
+
 	return &Game{
 		pendulum: pendulum,
 		network:  network,
@@ -70,6 +82,7 @@ func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
 		ticks: 0,
 		maxTicks: 0,
 		lastHiddenActivation: 0,
+		networkPath: networkPath,
 	}
 }
 
@@ -77,6 +90,25 @@ func (g *Game) Update() error {
 	// Check for window close
 	if ebiten.IsWindowBeingClosed() {
 		return errors.New("window closed")
+	}
+
+	// Handle network save/load
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		if err := g.network.SaveToFile(g.networkPath); err != nil {
+			g.logger.Printf("Failed to save network: %v", err)
+		} else {
+			g.logger.Printf("Network saved to %s", g.networkPath)
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		if err := g.network.LoadFromFile(g.networkPath); err != nil {
+			g.logger.Printf("Failed to load network: %v", err)
+		} else {
+			g.logger.Printf("Network loaded from %s", g.networkPath)
+			// Reset episode counter but keep max ticks for reference
+			g.episodes = 0
+			g.ticks = 0
+		}
 	}
 
 	// Get current state
