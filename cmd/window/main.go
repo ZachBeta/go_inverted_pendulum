@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/neural"
+	"github.com/zachbeta/go_inverted_pendulum/pkg/reward"
 )
 
 const (
@@ -25,6 +26,10 @@ type Game struct {
 	logger   *log.Logger
 	cartImg  *ebiten.Image
 	bobImg   *ebiten.Image
+	prevState env.State // Store previous state for reward calculation
+	episodes  int       // Track number of training episodes
+	ticks     int       // Track ticks within current episode
+	maxTicks  int       // Track best episode length
 }
 
 func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
@@ -42,6 +47,10 @@ func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
 		logger:   logger,
 		cartImg:  cartImg,
 		bobImg:   bobImg,
+		prevState: pendulum.GetState(),
+		episodes: 0,
+		ticks: 0,
+		maxTicks: 0,
 	}
 }
 
@@ -56,18 +65,43 @@ func (g *Game) Update() error {
 	
 	// Get force from network
 	force := g.network.Forward(state)
-	g.logger.Printf("Network force: %.2f N for angle: %.2f rad\n", force, state.AngleRadians)
+	g.logger.Printf("Episode %d Tick %d: Network force: %.2f N for angle: %.2f rad\n", 
+		g.episodes, g.ticks, force, state.AngleRadians)
 	
-	// Apply force
-	_, err := g.pendulum.Step(force)
+	// Apply force and get new state
+	newState, err := g.pendulum.Step(force)
 	if err != nil {
-		g.logger.Printf("Error stepping simulation: %v\n", err)
-		// Reset pendulum near center with current angle
+		g.logger.Printf("Episode %d ended after %d ticks with error: %v\n", 
+			g.episodes, g.ticks, err)
+		
+		// Update max ticks if this was the best episode
+		if g.ticks > g.maxTicks {
+			g.maxTicks = g.ticks
+			g.logger.Printf("New best episode! Max ticks: %d\n", g.maxTicks)
+		}
+		
+		// Calculate final reward for this episode
+		finalReward := reward.Calculate(g.prevState, state)
+		g.network.Update(finalReward)
+		g.logger.Printf("Final reward for episode %d: %.4f\n", g.episodes, finalReward)
+		
+		// Reset pendulum for next episode
 		config := g.pendulum.GetConfig()
 		g.pendulum = env.NewPendulum(config, g.logger)
-		// The pendulum's NewPendulum will initialize with default state
+		g.prevState = g.pendulum.GetState()
+		g.episodes++
+		g.ticks = 0
+		g.logger.Printf("Starting episode %d\n", g.episodes)
+		return nil
 	}
 
+	// Calculate and apply reward for this step
+	stepReward := reward.Calculate(g.prevState, newState)
+	g.network.Update(stepReward)
+	
+	// Update previous state and increment ticks
+	g.prevState = newState
+	g.ticks++
 	return nil
 }
 
@@ -112,7 +146,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Draw debug info
 	weights := g.network.GetWeights()
 	debugText := fmt.Sprintf(
-		"Network Control\n\n"+
+		"Training Progress\n"+
+		"Episode: %d\n"+
+		"Current Ticks: %d\n"+
+		"Best Episode: %d ticks\n\n"+
 		"State:\n"+
 		"  Cart Position: %.2f m\n"+
 		"  Cart Velocity: %.2f m/s\n"+
@@ -122,6 +159,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		"  Angle: %.4f\n"+
 		"  Angular Vel: %.4f\n"+
 		"  Bias: %.4f",
+		g.episodes,
+		g.ticks,
+		g.maxTicks,
 		state.CartPosition,
 		state.CartVelocity,
 		state.AngleRadians,
