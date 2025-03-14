@@ -54,6 +54,12 @@ func (n *Network) SetDebug(enabled bool) {
 // Forward performs a forward pass through the network
 // Returns a force value in [-5, 5] Newtons
 func (n *Network) Forward(state env.State) float64 {
+	force, _ := n.ForwardWithActivation(state)
+	return force
+}
+
+// ForwardWithActivation performs a forward pass and returns both the force and hidden layer activation
+func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 	// Store inputs for weight updates
 	n.lastInputs[0] = state.AngleRadians
 	n.lastInputs[1] = state.AngularVel
@@ -83,7 +89,7 @@ func (n *Network) Forward(state env.State) float64 {
 	
 	fmt.Printf("[Network Forward] Output force: %.4f N\n", n.lastForce)
 
-	return n.lastForce
+	return n.lastForce, hidden
 }
 
 // Update adjusts weights based on the reward received

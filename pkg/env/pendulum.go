@@ -11,6 +11,7 @@ type Pendulum struct {
 	config Config
 	state  State
 	logger *log.Logger
+	lastForce float64 // Track last applied force
 }
 
 // NewPendulum creates a new pendulum system with given config and logger
@@ -45,9 +46,16 @@ func (p *Pendulum) GetConfig() Config {
 	return p.config
 }
 
+// GetLastForce returns the last force applied to the pendulum
+func (p *Pendulum) GetLastForce() float64 {
+	return p.lastForce
+}
+
 // Step advances the simulation by one timestep with the given force
 // Returns new state and error if any constraints are violated
 func (p *Pendulum) Step(force float64) (State, error) {
+	p.lastForce = force // Store force for visualization
+	
 	// Clamp force to allowed range
 	force = math.Max(-p.config.MaxForce, math.Min(force, p.config.MaxForce))
 	

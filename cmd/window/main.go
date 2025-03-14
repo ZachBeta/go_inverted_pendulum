@@ -9,6 +9,10 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
+	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/neural"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/reward"
@@ -18,7 +22,34 @@ const (
 	screenWidth  = 800
 	screenHeight = 600
 	scale       = 100.0 // pixels per meter
+	
+	// Network visualization constants
+	networkPanelX = 10
+	networkPanelY = 10
+	networkPanelWidth = 200
+	networkPanelHeight = 150
+	nodeRadius = 15
 )
+
+var (
+	mplusNormalFont font.Face
+)
+
+func init() {
+	tt, err := opentype.Parse(fonts.MPlus1pRegular_ttf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	const dpi = 72
+	mplusNormalFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    12,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 type Game struct {
 	pendulum *env.Pendulum
@@ -30,6 +61,7 @@ type Game struct {
 	episodes  int       // Track number of training episodes
 	ticks     int       // Track ticks within current episode
 	maxTicks  int       // Track best episode length
+	lastHiddenActivation float64 // Store last hidden layer activation
 }
 
 func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
@@ -51,6 +83,7 @@ func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
 		episodes: 0,
 		ticks: 0,
 		maxTicks: 0,
+		lastHiddenActivation: 0,
 	}
 }
 
@@ -63,8 +96,9 @@ func (g *Game) Update() error {
 	// Get current state
 	state := g.pendulum.GetState()
 	
-	// Get force from network
-	force := g.network.Forward(state)
+	// Get force from network and store hidden activation
+	force, hiddenActivation := g.network.ForwardWithActivation(state)
+	g.lastHiddenActivation = hiddenActivation
 	g.logger.Printf("Episode %d Tick %d: Network force: %.2f N for angle: %.2f rad\n", 
 		g.episodes, g.ticks, force, state.AngleRadians)
 	
@@ -169,6 +203,135 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		state.AngularVel,
 		weights[0], weights[1], weights[2])
 	ebitenutil.DebugPrint(screen, debugText)
+
+	// Draw neural network visualization
+	g.drawNetworkVisualization(screen, state)
+}
+
+func (g *Game) drawNetworkVisualization(screen *ebiten.Image, state env.State) {
+	// Draw panel background
+	ebitenutil.DrawRect(screen, 
+		float64(networkPanelX), 
+		float64(networkPanelY), 
+		float64(networkPanelWidth), 
+		float64(networkPanelHeight), 
+		color.RGBA{40, 40, 40, 230})
+
+	// Calculate node positions
+	inputY := float64(networkPanelY + networkPanelHeight/2)
+	hiddenX := float64(networkPanelX + networkPanelWidth/2)
+	hiddenY := inputY
+	outputX := float64(networkPanelX + networkPanelWidth - nodeRadius*2)
+	outputY := inputY
+
+	// Draw connections
+	weights := g.network.GetWeights()
+	angleWeight := weights[0]
+	angularVelWeight := weights[1]
+
+	// Draw connections with thickness based on weight magnitude
+	drawWeightedConnection(screen, 
+		float64(networkPanelX+nodeRadius*2), inputY-nodeRadius,  // Angle input
+		hiddenX, hiddenY,
+		angleWeight)
+	drawWeightedConnection(screen, 
+		float64(networkPanelX+nodeRadius*2), inputY+nodeRadius,  // Angular velocity input
+		hiddenX, hiddenY,
+		angularVelWeight)
+	drawWeightedConnection(screen, 
+		hiddenX, hiddenY,
+		outputX, outputY,
+		1.0) // Output connection always full strength
+
+	// Draw nodes with activation colors
+	angleColor := getActivationColor(state.AngleRadians / math.Pi) // Normalize to [-1, 1]
+	velocityColor := getActivationColor(state.AngularVel / 10.0)   // Normalize assuming max ~10 rad/s
+	hiddenColor := getActivationColor(g.lastHiddenActivation)
+	outputColor := getActivationColor(g.pendulum.GetLastForce() / 5.0) // Normalize to [-1, 1]
+
+	// Draw input nodes
+	drawNode(screen, float64(networkPanelX+nodeRadius*2), inputY-nodeRadius, "θ", angleColor)
+	drawNode(screen, float64(networkPanelX+nodeRadius*2), inputY+nodeRadius, "ω", velocityColor)
+
+	// Draw hidden node
+	drawNode(screen, hiddenX, hiddenY, "H", hiddenColor)
+
+	// Draw output node
+	drawNode(screen, outputX, outputY, "F", outputColor)
+
+	// Draw network title
+	ebitenutil.DebugPrintAt(screen, "Network Activity", networkPanelX+5, networkPanelY+5)
+}
+
+func drawWeightedConnection(screen *ebiten.Image, x1, y1, x2, y2, weight float64) {
+	// Normalize weight to determine line color
+	normalizedWeight := math.Abs(weight) / 3.0 // Max weight is 3.0
+	if normalizedWeight > 1.0 {
+		normalizedWeight = 1.0
+	}
+
+	// Create color based on weight sign
+	var lineColor color.Color
+	if weight >= 0 {
+		lineColor = color.RGBA{
+			uint8(100 + 155*normalizedWeight),
+			uint8(100 + 155*normalizedWeight),
+			255,
+			255,
+		}
+	} else {
+		lineColor = color.RGBA{
+			255,
+			uint8(100 + 155*normalizedWeight),
+			uint8(100 + 155*normalizedWeight),
+			255,
+		}
+	}
+
+	ebitenutil.DrawLine(screen, x1, y1, x2, y2, lineColor)
+}
+
+func drawNode(screen *ebiten.Image, x, y float64, label string, nodeColor color.Color) {
+	ebitenutil.DrawCircle(screen, x, y, float64(nodeRadius), nodeColor)
+	ebitenutil.DrawCircle(screen, x, y, float64(nodeRadius)-1, color.Black)
+	
+	// Draw label
+	bound, _ := font.BoundString(mplusNormalFont, label)
+	w := (bound.Max.X - bound.Min.X).Ceil()
+	h := (bound.Max.Y - bound.Min.Y).Ceil()
+	text.Draw(screen, label, mplusNormalFont, 
+		int(x)-w/2, 
+		int(y)+h/2, 
+		color.White)
+}
+
+func getActivationColor(activation float64) color.Color {
+	// Clamp activation to [-1, 1]
+	if activation > 1.0 {
+		activation = 1.0
+	} else if activation < -1.0 {
+		activation = -1.0
+	}
+
+	// Convert to [0, 1] range
+	normalized := (activation + 1.0) / 2.0
+
+	// Create color gradient from blue (negative) to white (zero) to red (positive)
+	if activation >= 0 {
+		return color.RGBA{
+			uint8(255 * normalized),
+			uint8(100 + 155 * (1-normalized)),
+			uint8(100 + 155 * (1-normalized)),
+			255,
+		}
+	} else {
+		return color.RGBA{
+			uint8(100 + 155 * (1+normalized)),
+			uint8(100 + 155 * (1+normalized)),
+			255 * uint8(1-normalized),
+			255,
+		}
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
