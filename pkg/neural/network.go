@@ -133,8 +133,33 @@ func (n *Network) GetWeights() []float64 {
 	return []float64{n.angleWeight, n.angularVelWeight, n.bias}
 }
 
+// SetWeights updates the network weights with the provided values
+// The weights slice must contain exactly 3 values: [angleWeight, angularVelWeight, bias]
+func (n *Network) SetWeights(weights []float64) error {
+	if len(weights) != 3 {
+		return fmt.Errorf("expected 3 weights, got %d", len(weights))
+	}
+
+	if n.debug {
+		fmt.Printf("\n[Network] Setting weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+			weights[0], weights[1], weights[2])
+	}
+
+	n.angleWeight = weights[0]
+	n.angularVelWeight = weights[1]
+	n.bias = weights[2]
+	return nil
+}
+
+// SetLearningRate updates the learning rate
+func (n *Network) SetLearningRate(rate float64) {
+	if n.debug {
+		fmt.Printf("[Network] Setting learning rate: %.4f\n", rate)
+	}
+	n.learningRate = rate
+}
+
 // sign returns the sign of a number: 1 for positive, -1 for negative, 0 for zero
-// This ensures deterministic behavior in our weight updates
 func sign(x float64) float64 {
 	if x > 0 {
 		return 1.0

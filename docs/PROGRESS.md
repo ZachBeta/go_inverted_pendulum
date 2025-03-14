@@ -1,5 +1,8 @@
 # Project Progress Tracking
 
+## next steps
+* store the neural network in disk, so we can carry it between runs
+
 ## Current Status (as of March 14, 2025)
 
 ### ✅ Completed Components

@@ -12,6 +12,7 @@ import (
 	"github.com/zachbeta/go_inverted_pendulum/pkg/neural"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/render"
 	"github.com/zachbeta/go_inverted_pendulum/pkg/reward"
+	"github.com/zachbeta/go_inverted_pendulum/pkg/training"
 )
 
 var (
@@ -37,8 +38,9 @@ func init() {
 type Game struct {
 	pendulum *env.Pendulum
 	network  *neural.Network
-	logger   *log.Logger
+	trainer  *training.Trainer
 	drawer   *render.Drawer
+	logger   *log.Logger
 	prevState env.State // Store previous state for reward calculation
 	episodes  int       // Track number of training episodes
 	ticks     int       // Track ticks within current episode
@@ -47,11 +49,22 @@ type Game struct {
 }
 
 func NewGame(pendulum *env.Pendulum, logger *log.Logger) *Game {
+	// Create neural network
+	network := neural.NewNetwork()
+
+	// Create trainer with default config
+	trainer := training.NewTrainer(
+		training.NewDefaultConfig(),
+		network,
+		logger,
+	)
+
 	return &Game{
 		pendulum: pendulum,
-		network:  neural.NewNetwork(),
-		logger:   logger,
+		network:  network,
+		trainer:  trainer,
 		drawer:   render.NewDrawer(mplusNormalFont),
+		logger:   logger,
 		prevState: pendulum.GetState(),
 		episodes: 0,
 		ticks: 0,
@@ -77,6 +90,23 @@ func (g *Game) Update() error {
 	
 	// Apply force and get new state
 	newState, err := g.pendulum.Step(force)
+	
+	// Calculate reward for this step
+	stepReward := reward.Calculate(g.prevState, state)
+	
+	// Create experience for training
+	experience := training.Experience{
+		State:     state,
+		Action:    force,
+		Reward:    stepReward,
+		NextState: newState,
+		Done:      err != nil,
+		TimeStep:  uint64(g.ticks),
+	}
+	
+	// Add experience to trainer
+	g.trainer.AddExperience(experience)
+
 	if err != nil {
 		g.logger.Printf("Episode %d ended after %d ticks with error: %v\n", 
 			g.episodes, g.ticks, err)
@@ -87,10 +117,8 @@ func (g *Game) Update() error {
 			g.logger.Printf("New best episode! Max ticks: %d\n", g.maxTicks)
 		}
 		
-		// Calculate final reward for this episode
-		finalReward := reward.Calculate(g.prevState, state)
-		g.network.Update(finalReward)
-		g.logger.Printf("Final reward for episode %d: %.4f\n", g.episodes, finalReward)
+		// Handle end of episode
+		g.trainer.OnEpisodeEnd(g.ticks)
 		
 		// Reset pendulum for next episode
 		config := g.pendulum.GetConfig()
@@ -102,10 +130,6 @@ func (g *Game) Update() error {
 		return nil
 	}
 
-	// Calculate and apply reward for this step
-	stepReward := reward.Calculate(g.prevState, newState)
-	g.network.Update(stepReward)
-	
 	// Update previous state and increment ticks
 	g.prevState = newState
 	g.ticks++
