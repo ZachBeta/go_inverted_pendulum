@@ -1,0 +1,21 @@
+{
+  "episode": 0,
+  "metrics": {
+    "EpisodeID": 0,
+    "StartTime": "2025-03-15T19:19:52.753687-04:00",
+    "MaxAngle": 1.0471975511965979,
+    "MinAngle": 0.5235987755982989,
+    "TotalReward": 2.25,
+    "ExperienceCount": 3,
+    "WeightUpdates": [
+      {
+        "Angle": 1.9944040616237828,
+        "AngularVel": 0.9972020308118914,
+        "Bias": -0.008499955124070868,
+        "Timestamp": "2025-03-15T19:19:52.753774-04:00"
+      }
+    ],
+    "BatchCount": 1
+  },
+  "timestamp": "2025-03-15T19:19:52.754018-04:00"
+}

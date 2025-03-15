@@ -1,6 +1,7 @@
 package training
 
 import (
+	"math"
 	"time"
 
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
@@ -49,6 +50,9 @@ type Config struct {
 	TargetEpisodeTicks  int     // Target number of ticks per episode
 	WeightClipMin       float64 // Minimum weight value
 	WeightClipMax       float64 // Maximum weight value
+	DeltaTime           float64 // Time step duration in seconds
+	SuccessAngleThresh  float64 // Maximum angle (radians) considered "upright"
+	SuccessDuration     float64 // Duration (seconds) needed for "success"
 }
 
 // NewDefaultConfig returns a Config with reasonable default values
@@ -63,5 +67,8 @@ func NewDefaultConfig() Config {
 		TargetEpisodeTicks:  1000,
 		WeightClipMin:       -3.0,
 		WeightClipMax:       3.0,
+		DeltaTime:           0.02,  // 50Hz simulation
+		SuccessAngleThresh:  math.Pi / 6.0, // 30 degrees
+		SuccessDuration:     5.0,   // 5 seconds upright
 	}
 }

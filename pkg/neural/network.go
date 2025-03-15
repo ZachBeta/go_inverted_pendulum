@@ -26,6 +26,7 @@ type Network struct {
 	learningRate float64
 	lastForce    float64 // Store last output for weight updates
 	lastInputs   []float64 // Store last inputs for weight updates
+	lastValue    float64 // Store last state value for TD learning
 
 	// Debug flag
 	debug bool
@@ -64,12 +65,14 @@ func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 	n.lastInputs[0] = state.AngleRadians
 	n.lastInputs[1] = state.AngularVel
 	
-	fmt.Printf("\n[Network Forward] State: angle=%.4f rad (%.1f°), angularVel=%.4f rad/s\n",
-		state.AngleRadians,
-		state.AngleRadians * 180 / math.Pi,
-		state.AngularVel)
-	fmt.Printf("[Network Forward] Current weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
-		n.angleWeight, n.angularVelWeight, n.bias)
+	if n.debug {
+		fmt.Printf("\n[Network Forward] State: angle=%.4f rad (%.1f°), angularVel=%.4f rad/s\n",
+			state.AngleRadians,
+			state.AngleRadians * 180 / math.Pi,
+			state.AngularVel)
+		fmt.Printf("[Network Forward] Current weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+			n.angleWeight, n.angularVelWeight, n.bias)
+	}
 
 	// Invert angle input so positive angle (falling right) generates negative force
 	angle := -state.AngleRadians * 5.0  // Scale angle for stronger response
@@ -80,24 +83,53 @@ func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 		n.angularVelWeight*angularVel +
 		n.bias
 	
-	fmt.Printf("[Network Forward] Scaled inputs: angle=%.4f, angularVel=%.4f\n", angle, angularVel)
-	fmt.Printf("[Network Forward] Hidden activation: %.4f\n", hidden)
+	if n.debug {
+		fmt.Printf("[Network Forward] Scaled inputs: angle=%.4f, angularVel=%.4f\n", angle, angularVel)
+		fmt.Printf("[Network Forward] Hidden activation: %.4f\n", hidden)
+	}
 	
 	// Hyperbolic tangent activation to bound output
 	// Maps hidden value to [-1, 1], then scale to [-5, 5]
 	n.lastForce = 5.0 * math.Tanh(hidden)
 	
-	fmt.Printf("[Network Forward] Output force: %.4f N\n", n.lastForce)
+	if n.debug {
+		fmt.Printf("[Network Forward] Output force: %.4f N\n", n.lastForce)
+	}
 
 	return n.lastForce, hidden
+}
+
+// Predict estimates the value of a state for temporal difference learning
+// Returns a value in [-1, 1] representing the estimated "goodness" of the state
+func (n *Network) Predict(angleRadians, angularVel float64) float64 {
+	// Scale inputs as in Forward
+	angle := -angleRadians * 5.0
+	velocity := -angularVel * 2.0
+
+	// Compute hidden activation
+	hidden := n.angleWeight*angle +
+		n.angularVelWeight*velocity +
+		n.bias
+
+	// Store value for TD learning
+	n.lastValue = math.Tanh(hidden)
+
+	if n.debug {
+		fmt.Printf("[Network Predict] State value: %.4f (angle=%.1f°, vel=%.2f)\n",
+			n.lastValue, angleRadians*180/math.Pi, angularVel)
+	}
+
+	return n.lastValue
 }
 
 // Update adjusts weights based on the reward received
 // reward should be in [-1, 1] range
 func (n *Network) Update(reward float64) {
-	fmt.Printf("\n[Network Update] Received reward: %.4f\n", reward)
-	fmt.Printf("[Network Update] Before weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
-		n.angleWeight, n.angularVelWeight, n.bias)
+	if n.debug {
+		fmt.Printf("\n[Network Update] Received reward: %.4f\n", reward)
+		fmt.Printf("[Network Update] Before weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
+			n.angleWeight, n.angularVelWeight, n.bias)
+	}
 
 	// Scale learning rate by reward magnitude
 	update := n.learningRate * reward
@@ -110,8 +142,10 @@ func (n *Network) Update(reward float64) {
 	angularVelUpdate := update * n.lastInputs[1] * forceSign
 	biasUpdate := update * forceSign
 
-	fmt.Printf("[Network Update] Updates: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
-		angleUpdate, angularVelUpdate, biasUpdate)
+	if n.debug {
+		fmt.Printf("[Network Update] Updates: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+			angleUpdate, angularVelUpdate, biasUpdate)
+	}
 	
 	// Update weights in direction that reinforces good actions
 	// and weakens bad actions
@@ -124,8 +158,10 @@ func (n *Network) Update(reward float64) {
 	n.angularVelWeight = clip(n.angularVelWeight, -2.0, 2.0)  // Keep velocity response moderate
 	n.bias = clip(n.bias, -1.0, 1.0)
 
-	fmt.Printf("[Network Update] After weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
-		n.angleWeight, n.angularVelWeight, n.bias)
+	if n.debug {
+		fmt.Printf("[Network Update] After weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
+			n.angleWeight, n.angularVelWeight, n.bias)
+	}
 }
 
 // GetWeights returns the current network weights for testing

@@ -1,0 +1,22 @@
+{
+  "episode": 0,
+  "weights": [
+    2,
+    1,
+    0
+  ],
+  "datetime": "2025-03-15T19:17:45.117993-04:00",
+  "duration": 0,
+  "learning_rate": 0.05,
+  "success_rate": 0,
+  "metrics": {
+    "EpisodeID": 0,
+    "StartTime": "2025-03-15T19:17:45.117987-04:00",
+    "MaxAngle": 0.1,
+    "MinAngle": 0.1,
+    "TotalReward": 0.8,
+    "ExperienceCount": 1,
+    "WeightUpdates": [],
+    "BatchCount": 0
+  }
+}
