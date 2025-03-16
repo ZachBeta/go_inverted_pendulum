@@ -31,15 +31,15 @@ const (
 	hiddenLayerX = networkPanelX + networkPanelWidth/2
 	outputLayerX = networkPanelX + networkPanelWidth - 40
 	
-	// Training metrics panel
-	metricsPanelX = 10
-	metricsPanelY = 220
-	metricsPanelWidth = 250
-	metricsPanelHeight = 180
+	// Top info panel
+	topPanelHeight = 60
+	
+	// Bottom info panel
+	bottomPanelHeight = 80
 	
 	// Weight history graph
 	weightHistoryX = 10
-	weightHistoryY = 410
+	weightHistoryY = ScreenHeight - bottomPanelHeight - 180
 	weightHistoryWidth = 250
 	weightHistoryHeight = 180
 	
@@ -197,61 +197,81 @@ func (d *Drawer) Draw(screen *ebiten.Image, pendulum *env.Pendulum, network *neu
 		d.UpdateTrainingStats(trainer)
 	}
 	
-	// Draw state info panel
-	debugText := fmt.Sprintf(
-		"Training Progress\n"+
-		"Episode: %d\n"+
-		"Current Ticks: %d\n"+
-		"Best Episode: %d ticks\n\n"+
-		"State:\n"+
-		"  Cart Position: %.2f m\n"+
-		"  Cart Velocity: %.2f m/s\n"+
-		"  Angle: %.2f rad (%.1f°)\n"+
-		"  Angular Vel: %.2f rad/s\n\n"+
-		"Network Weights:\n"+
-		"  Angle: %.4f\n"+
-		"  Angular Vel: %.4f\n"+
-		"  Bias: %.4f\n\n"+
-		"Learning Rate: %.4f\n"+
-		"Success Rate: %.1f%%",
-		episodes,
-		ticks,
-		maxTicks,
-		state.CartPosition,
-		state.CartVelocity,
-		state.AngleRadians,
-		state.AngleRadians*180/math.Pi,
-		state.AngularVel,
-		weights[0],
-		weights[1],
-		weights[2],
-		d.learningRate,
-		d.successRate*100)
+	// Draw top info panel
+	d.drawTopInfoPanel(screen, episodes, ticks, maxTicks, state)
 	
-	text.Draw(screen, debugText, d.font, 550, 30, color.White)
+	// Draw bottom info panel
+	d.drawBottomInfoPanel(screen, weights)
 	
 	// Draw network visualization
 	d.drawNetworkVisualization(screen, state, network, lastHiddenActivation)
-	
-	// Draw training metrics panel
-	d.drawTrainingMetricsPanel(screen)
 	
 	// Draw weight history graph
 	d.drawWeightHistoryGraph(screen)
 }
 
+func (d *Drawer) drawTopInfoPanel(screen *ebiten.Image, episodes, ticks, maxTicks int, state env.State) {
+	// Draw panel background
+	ebitenutil.DrawRect(screen, 0, 0, float64(ScreenWidth), float64(topPanelHeight), color.RGBA{40, 40, 40, 200})
+	
+	// Draw training progress
+	trainingText := fmt.Sprintf(
+		"Episode: %d | Current Ticks: %d | Best Episode: %d ticks | Success Rate: %.1f%% | Learning Rate: %.4f",
+		episodes,
+		ticks,
+		maxTicks,
+		d.successRate*100,
+		d.learningRate)
+	
+	text.Draw(screen, trainingText, d.font, 10, 25, color.White)
+	
+	// Draw state info
+	stateText := fmt.Sprintf(
+		"Cart Position: %.2f m | Cart Velocity: %.2f m/s | Angle: %.2f rad (%.1f°) | Angular Velocity: %.2f rad/s",
+		state.CartPosition,
+		state.CartVelocity,
+		state.AngleRadians,
+		state.AngleRadians*180/math.Pi,
+		state.AngularVel)
+	
+	text.Draw(screen, stateText, d.font, 10, 45, color.White)
+}
+
+func (d *Drawer) drawBottomInfoPanel(screen *ebiten.Image, weights []float64) {
+	// Draw panel background
+	ebitenutil.DrawRect(screen, 0, float64(ScreenHeight-bottomPanelHeight), float64(ScreenWidth), float64(bottomPanelHeight), color.RGBA{40, 40, 40, 200})
+	
+	// Draw network weights
+	weightsText := fmt.Sprintf(
+		"Network Weights: Angle: %.4f | Angular Velocity: %.4f | Bias: %.4f | Avg Reward: %.4f",
+		weights[0],
+		weights[1],
+		weights[2],
+		d.avgReward)
+	
+	text.Draw(screen, weightsText, d.font, 10, ScreenHeight-bottomPanelHeight+25, color.White)
+	
+	// Draw controls info
+	controlsText := "Controls: Left/Right Arrow = Manual Force | S = Save Network | L = Load Network"
+	text.Draw(screen, controlsText, d.font, 10, ScreenHeight-bottomPanelHeight+45, color.White)
+	
+	// Draw performance info
+	performanceText := fmt.Sprintf("Episode Duration Trend: %d episodes tracked", len(d.episodeDurations))
+	text.Draw(screen, performanceText, d.font, 10, ScreenHeight-bottomPanelHeight+65, color.White)
+}
+
 func (d *Drawer) drawNetworkVisualization(screen *ebiten.Image, state env.State, network *neural.Network, lastHiddenActivation float64) {
 	// Draw panel background with title
-	ebitenutil.DrawRect(screen, float64(networkPanelX), float64(networkPanelY), 
+	ebitenutil.DrawRect(screen, float64(networkPanelX), float64(networkPanelY + topPanelHeight + 10), 
 		float64(networkPanelWidth), float64(networkPanelHeight), color.RGBA{40, 40, 40, 255})
 	text.Draw(screen, "Network Architecture", d.font, 
-		networkPanelX+5, networkPanelY+15, color.White)
+		networkPanelX+5, networkPanelY+topPanelHeight+25, color.White)
 
 	// Calculate node positions
-	inputY1 := float64(networkPanelY) + float64(networkPanelHeight)/3
-	inputY2 := float64(networkPanelY) + 2*float64(networkPanelHeight)/3
-	hiddenY := float64(networkPanelY) + float64(networkPanelHeight)/2
-	outputY := float64(networkPanelY) + float64(networkPanelHeight)/2
+	inputY1 := float64(networkPanelY + topPanelHeight + 10) + float64(networkPanelHeight)/3
+	inputY2 := float64(networkPanelY + topPanelHeight + 10) + 2*float64(networkPanelHeight)/3
+	hiddenY := float64(networkPanelY + topPanelHeight + 10) + float64(networkPanelHeight)/2
+	outputY := float64(networkPanelY + topPanelHeight + 10) + float64(networkPanelHeight)/2
 
 	// Draw connections with weights
 	weights := network.GetWeights()
@@ -290,50 +310,6 @@ func (d *Drawer) drawBiasConnection(screen *ebiten.Image, x, y, weight float64) 
 	
 	// Draw connection with weight
 	d.drawWeightedConnection(screen, biasX, biasY, x, y, weight)
-}
-
-func (d *Drawer) drawTrainingMetricsPanel(screen *ebiten.Image) {
-	// Draw panel background with title
-	ebitenutil.DrawRect(screen, float64(metricsPanelX), float64(metricsPanelY), 
-		float64(metricsPanelWidth), float64(metricsPanelHeight), color.RGBA{40, 40, 40, 255})
-	text.Draw(screen, "Training Metrics", d.font, 
-		metricsPanelX+5, metricsPanelY+15, color.White)
-		
-	// Draw metrics
-	y := metricsPanelY + 35
-	
-	// Success rate visualization
-	text.Draw(screen, "Success Rate:", d.font, metricsPanelX+10, y, color.White)
-	d.drawProgressBar(screen, metricsPanelX+110, y-10, 130, 15, d.successRate, color.RGBA{100, 255, 100, 255})
-	y += 25
-	
-	// Average reward visualization
-	text.Draw(screen, "Avg Reward:", d.font, metricsPanelX+10, y, color.White)
-	normalizedReward := (d.avgReward + 1.0) / 2.0 // Convert from [-1,1] to [0,1]
-	d.drawProgressBar(screen, metricsPanelX+110, y-10, 130, 15, normalizedReward, color.RGBA{100, 100, 255, 255})
-	y += 25
-	
-	// Learning rate visualization
-	text.Draw(screen, "Learning Rate:", d.font, metricsPanelX+10, y, color.White)
-	// Normalize learning rate for visualization (assuming max of 0.1)
-	normalizedLR := math.Min(1.0, d.learningRate/0.1)
-	d.drawProgressBar(screen, metricsPanelX+110, y-10, 130, 15, normalizedLR, color.RGBA{255, 200, 100, 255})
-	y += 25
-	
-	// Episode duration trend
-	text.Draw(screen, "Episode Duration Trend:", d.font, metricsPanelX+10, y, color.White)
-	y += 15
-	
-	// Draw mini graph of episode durations
-	if len(d.episodeDurations) > 1 {
-		graphWidth := metricsPanelWidth - 20
-		graphHeight := 50
-		graphX := metricsPanelX + 10
-		graphY := y
-		
-		d.drawMiniGraph(screen, d.episodeDurations, graphX, graphY, graphWidth, graphHeight, 
-			color.RGBA{100, 255, 100, 255})
-	}
 }
 
 func (d *Drawer) drawWeightHistoryGraph(screen *ebiten.Image) {
