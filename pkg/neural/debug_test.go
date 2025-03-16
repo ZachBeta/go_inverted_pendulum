@@ -13,8 +13,6 @@ import (
 	"github.com/zachbeta/go_inverted_pendulum/pkg/metrics"
 )
 
-// TestNetworkLearningDebug is a comprehensive test to debug why the network isn't learning
-// It creates a controlled environment to test various aspects of the learning process
 func TestNetworkLearningDebug(t *testing.T) {
 	// Create a test directory for metrics
 	testDir := filepath.Join(os.TempDir(), fmt.Sprintf("neural_test_%d", time.Now().UnixNano()))
@@ -152,8 +150,8 @@ func TestNetworkLearningDebug(t *testing.T) {
 					AngularVel:   0.1 * math.Sin(float64(step)),
 				}
 				
-				// Get network prediction and action
-				force := network.Forward(state)
+				// Get network action and update
+				network.Forward(state) // Force used internally for updates
 				
 				// Calculate reward (better for keeping pendulum upright)
 				reward := -math.Abs(state.AngleRadians) - 0.5*math.Abs(state.AngularVel)

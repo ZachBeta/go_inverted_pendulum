@@ -206,33 +206,57 @@ func (l *Logger) LogPrediction(angle, angularVel, stateValue float64) error {
 	return nil
 }
 
-// LogUpdate records a weight update
-func (l *Logger) LogUpdate(reward, angleUpdate, angularVelUpdate, biasUpdate float64) error {
-	// Always log to database
-	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "reward", reward, ""); err != nil {
+// LogUpdate records a weight update with progressive training metrics
+func (l *Logger) LogUpdate(error, angleWeight, angularVelWeight, bias, difficulty, successRate float64) error {
+	// Record basic metrics
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "error", error, ""); err != nil {
 		return err
 	}
 	
-	metadata := map[string]float64{
-		"angle_update":      angleUpdate,
-		"angular_vel_update": angularVelUpdate,
-		"bias_update":        biasUpdate,
-	}
-	metadataJSON, err := json.Marshal(metadata)
-	if err != nil {
-		return fmt.Errorf("failed to marshal update metadata: %w", err)
+	// Record weights
+	if err := l.db.RecordWeights(l.sessionID, l.episode, angleWeight, angularVelWeight, bias, 0); err != nil {
+		return err
 	}
 	
-	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "weight_updates", 
-		angleUpdate*angleUpdate+angularVelUpdate*angularVelUpdate+biasUpdate*biasUpdate, 
-		string(metadataJSON)); err != nil {
+	// Record progressive training metrics
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "training", "difficulty", difficulty, ""); err != nil {
+		return err
+	}
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "training", "success_rate", successRate, ""); err != nil {
 		return err
 	}
 	
 	// Selectively log to console
 	if l.shouldLogToConsole() {
-		l.stdLogger.Printf("[Metrics] Update (ep:%d,step:%d): reward=%.4f, updates=[%.4f, %.4f, %.4f]",
-			l.episode, l.step, reward, angleUpdate, angularVelUpdate, biasUpdate)
+		l.stdLogger.Printf("[Metrics] Update (ep:%d,step:%d): error=%.4f, diff=%.2f, success=%.2f%%",
+			l.episode, l.step, error, difficulty, successRate*100)
+	}
+	
+	return nil
+}
+
+// LogDifficultyChange records a change in training difficulty
+func (l *Logger) LogDifficultyChange(oldDifficulty, newDifficulty float64, reason string) error {
+	metadata := map[string]interface{}{
+		"old_difficulty": oldDifficulty,
+		"new_difficulty": newDifficulty,
+		"reason":        reason,
+		"timestamp":     time.Now().Format(time.RFC3339),
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal difficulty change metadata: %w", err)
+	}
+	
+	// Record the change event
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "training", "difficulty_change", 
+		newDifficulty, string(metadataJSON)); err != nil {
+		return err
+	}
+	
+	// Selectively log to console
+	if l.shouldLogToConsole() {
+		l.stdLogger.Printf("[Metrics] Difficulty %s: %.2f → %.2f", reason, oldDifficulty, newDifficulty)
 	}
 	
 	return nil

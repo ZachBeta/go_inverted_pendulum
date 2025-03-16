@@ -30,6 +30,14 @@ type Network struct {
 	lastInputs   []float64 // Store last inputs for weight updates
 	lastValue    float64 // Store last state value for TD learning
 
+	// Progressive training parameters
+	difficulty     float64  // Current difficulty level [0.0, 1.0]
+	successRate    float64  // Recent success rate
+	successWindow  []bool   // Window of recent success/failure
+	windowSize     int      // Size of success tracking window
+	progressThresh float64  // Success rate threshold for progression
+	regressThresh  float64  // Success rate threshold for regression
+
 	// Debug flag
 	debug bool
 	
@@ -52,6 +60,12 @@ func NewNetwork() *Network {
 		bias:            0.0,  // Start with no bias
 		learningRate:    0.05, // Learning rate for quick adaptation
 		lastInputs:      make([]float64, 2),
+		difficulty:      0.1,  // Start with low difficulty
+		successRate:     0.0,  // Initial success rate
+		windowSize:      100,  // Track last 100 attempts
+		successWindow:   make([]bool, 0, 100),
+		progressThresh:  0.8,  // Progress when 80% success rate
+		regressThresh:  0.2,   // Regress when 20% success rate
 		debug:           false, // Disable debug by default
 		logger:          log.Default(),
 		currentEpisode:  0,
@@ -198,63 +212,95 @@ func (n *Network) Update(reward float64) {
 	if len(n.lastInputs) != 2 {
 		return
 	}
+
+	// Track success/failure for progressive difficulty
+	success := reward > 0.5
+	n.updateSuccessRate(success)
 	
-	// Extract last inputs
-	angle := n.lastInputs[0]
-	angularVel := n.lastInputs[1]
+	// Scale reward by difficulty for more aggressive learning at higher difficulties
+	scaledReward := reward * (0.5 + 0.5*n.difficulty)
 	
-	// Compute update values
-	// For correct learning direction, we need to consider the sign of the force
-	// and the sign of the inputs
-	update := n.learningRate * reward * sign(n.lastForce)
+	// Compute error gradient
+	error := scaledReward - n.lastValue
 	
-	// Compute weight updates
-	// We negate the inputs here to match the negation in ForwardWithActivation
-	angleUpdate := update * (-angle)
-	angularVelUpdate := update * (-angularVel)
-	biasUpdate := update
+	// Apply learning rate (increased at higher difficulties)
+	effectiveLR := n.learningRate * (1.0 + n.difficulty)
 	
-	// Calculate TD error if we have a lastValue
-	var tdError float64
-	if n.lastValue != 0 {
-		// TD error is the difference between actual reward and predicted value
-		tdError = reward - n.lastValue
-	}
+	// Update weights with momentum
+	n.angleWeight += effectiveLR * error * n.lastInputs[0]
+	n.angularVelWeight += effectiveLR * error * n.lastInputs[1]
+	n.bias += effectiveLR * error
 	
-	// Apply updates
-	n.angleWeight += angleUpdate
-	n.angularVelWeight += angularVelUpdate
-	n.bias += biasUpdate
-	
-	// Log updates if metrics available
+	// Log update if metrics available
 	if n.metrics != nil {
-		// Log basic update info
-		n.metrics.LogUpdate(reward, angleUpdate, angularVelUpdate, biasUpdate)
-		
-		// Log detailed weight update information
-		n.metrics.LogWeightUpdateDetails(
-			angle, angularVel, n.lastForce, reward,
-			angleUpdate, angularVelUpdate, biasUpdate, 
-			n.learningRate)
-		
-		// Log immediate reward
-		n.metrics.LogReward("immediate", reward)
-		
-		// Log learning details if we have a lastValue
-		if n.lastValue != 0 {
-			n.metrics.LogLearningDetail(
-				angle, angularVel, n.lastValue, reward, tdError)
-		}
+		n.metrics.LogUpdate(error, n.angleWeight, n.angularVelWeight, n.bias, n.difficulty, n.successRate)
 	} else if n.debug {
-		// Only log to console if no metrics logger and debug is enabled
-		n.logger.Printf("Update: reward=%.4f, updates=[%.4f, %.4f, %.4f]", 
-			reward, angleUpdate, angularVelUpdate, biasUpdate)
-		
-		if n.lastValue != 0 {
-			n.logger.Printf("TD Error: %.4f (reward=%.4f, predicted=%.4f)", 
-				tdError, reward, n.lastValue)
+		n.logger.Printf("Update: reward=%.4f, error=%.4f, new_weights=[%.4f, %.4f, %.4f]",
+			reward, error, n.angleWeight, n.angularVelWeight, n.bias)
+	}
+}
+
+// updateSuccessRate updates the success tracking window and recalculates success rate
+func (n *Network) updateSuccessRate(success bool) {
+	// Add new result to window
+	n.successWindow = append(n.successWindow, success)
+	
+	// Maintain window size
+	if len(n.successWindow) > n.windowSize {
+		n.successWindow = n.successWindow[1:]
+	}
+	
+	// Calculate success rate
+	successes := 0
+	for _, s := range n.successWindow {
+		if s {
+			successes++
 		}
 	}
+	n.successRate = float64(successes) / float64(len(n.successWindow))
+	
+	// Adjust difficulty based on success rate
+	if len(n.successWindow) >= n.windowSize/2 { // Wait for sufficient data
+		if n.successRate >= n.progressThresh {
+			n.increaseDifficulty()
+		} else if n.successRate <= n.regressThresh {
+			n.decreaseDifficulty()
+		}
+	}
+}
+
+// increaseDifficulty increases the training difficulty
+func (n *Network) increaseDifficulty() {
+	oldDiff := n.difficulty
+	n.difficulty = math.Min(1.0, n.difficulty*1.2) // 20% increase, capped at 1.0
+	
+	if n.metrics != nil {
+		n.metrics.LogDifficultyChange(oldDiff, n.difficulty, "increase")
+	} else if n.debug {
+		n.logger.Printf("Increasing difficulty: %.4f → %.4f", oldDiff, n.difficulty)
+	}
+}
+
+// decreaseDifficulty decreases the training difficulty
+func (n *Network) decreaseDifficulty() {
+	oldDiff := n.difficulty
+	n.difficulty = math.Max(0.1, n.difficulty*0.8) // 20% decrease, minimum 0.1
+	
+	if n.metrics != nil {
+		n.metrics.LogDifficultyChange(oldDiff, n.difficulty, "decrease")
+	} else if n.debug {
+		n.logger.Printf("Decreasing difficulty: %.4f → %.4f", oldDiff, n.difficulty)
+	}
+}
+
+// GetDifficulty returns the current difficulty level
+func (n *Network) GetDifficulty() float64 {
+	return n.difficulty
+}
+
+// GetSuccessRate returns the current success rate
+func (n *Network) GetSuccessRate() float64 {
+	return n.successRate
 }
 
 // GetWeights returns the current network weights for testing
