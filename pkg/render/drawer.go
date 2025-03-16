@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"sort"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -67,6 +68,10 @@ type Drawer struct {
 	avgReward              float64
 	successRate            float64
 	learningRate           float64
+	
+	// Ensemble stats
+	ensembleStats          []map[string]interface{}
+	ensembleStatsPanel     *ebiten.Image
 }
 
 func NewDrawer(font font.Face) *Drawer {
@@ -208,6 +213,9 @@ func (d *Drawer) Draw(screen *ebiten.Image, pendulum *env.Pendulum, network *neu
 	
 	// Draw weight history graph
 	d.drawWeightHistoryGraph(screen)
+	
+	// Draw ensemble stats
+	d.DrawEnsembleStats(screen)
 }
 
 func (d *Drawer) drawTopInfoPanel(screen *ebiten.Image, episodes, ticks, maxTicks int, state env.State) {
@@ -518,4 +526,69 @@ func (d *Drawer) getActivationColor(activation float64) color.Color {
 		intensity := uint8(math.Min(255, 255*(1-normalizedActivation)))
 		return color.RGBA{255, intensity, intensity, 255}
 	}
+}
+
+func (d *Drawer) UpdateEnsembleStats(stats []map[string]interface{}) {
+	d.ensembleStats = stats
+	
+	// Create or recreate the ensemble stats panel
+	if d.ensembleStatsPanel == nil {
+		d.ensembleStatsPanel = ebiten.NewImage(300, 400)
+	}
+	
+	// Clear the panel
+	d.ensembleStatsPanel.Fill(color.RGBA{0, 0, 0, 255})
+	
+	// Draw stats to the panel
+	y := 10
+	text.Draw(d.ensembleStatsPanel, "ENSEMBLE STATISTICS", d.font, 10, y, color.White)
+	y += 20
+	
+	// Draw header
+	text.Draw(d.ensembleStatsPanel, "ID   Episodes  Max Ticks  Success%  Status", d.font, 10, y, color.White)
+	y += 20
+	
+	// Sort stats by max ticks (descending)
+	sort.Slice(d.ensembleStats, func(i, j int) bool {
+		return d.ensembleStats[i]["max_ticks"].(int) > d.ensembleStats[j]["max_ticks"].(int)
+	})
+	
+	// Draw each network's stats
+	for _, stat := range d.ensembleStats {
+		id := stat["id"].(int)
+		episodes := stat["episodes"].(int)
+		maxTicks := stat["max_ticks"].(int)
+		successRate := stat["success_rate"].(float64) * 100
+		status := stat["status"].(string)
+		isBest := stat["is_best"].(bool)
+		
+		// Highlight the best network
+		textColor := color.RGBA{255, 255, 255, 255} // White
+		if isBest {
+			textColor = color.RGBA{255, 255, 0, 255} // Yellow for best network
+		}
+		
+		statText := fmt.Sprintf("%-4d %-9d %-10d %-8.1f %s", 
+			id, episodes, maxTicks, successRate, status)
+		text.Draw(d.ensembleStatsPanel, statText, d.font, 10, y, textColor)
+		y += 15
+		
+		// Don't exceed panel height
+		if y > 380 {
+			break
+		}
+	}
+}
+
+func (d *Drawer) DrawEnsembleStats(screen *ebiten.Image) {
+	if d.ensembleStatsPanel == nil || len(d.ensembleStats) == 0 {
+		return
+	}
+	
+	// Position the panel in the bottom right corner
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(ScreenWidth-310), float64(ScreenHeight-410))
+	
+	// Draw the panel
+	screen.DrawImage(d.ensembleStatsPanel, op)
 }
