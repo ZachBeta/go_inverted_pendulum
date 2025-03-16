@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"path/filepath"
 	"sync"
 	"time"
@@ -364,4 +365,106 @@ func (l *Logger) LogTrainingProgress(episodeCount int, successRate float64, avgR
 	}
 	
 	return nil
+}
+
+// LogLearningDetail records detailed information about the learning process
+func (l *Logger) LogLearningDetail(stateAngle, stateVelocity, predictedValue, actualReward, tdError float64) error {
+	// Always log to database
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "learning", "td_error", tdError, ""); err != nil {
+		return err
+	}
+	
+	// Add additional metadata about the learning process
+	metadata := map[string]interface{}{
+		"state_angle": stateAngle,
+		"state_velocity": stateVelocity,
+		"predicted_value": predictedValue,
+		"actual_reward": actualReward,
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal learning metadata: %w", err)
+	}
+	
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "learning", "state_reward_comparison", actualReward-predictedValue, string(metadataJSON)); err != nil {
+		return err
+	}
+	
+	// Selectively log to console
+	if l.shouldLogToConsole() {
+		l.stdLogger.Printf("[Metrics] Learning (ep:%d,step:%d): angle=%.2f, vel=%.2f, prediction=%.2f, reward=%.2f, error=%.2f",
+			l.episode, l.step, stateAngle, stateVelocity, predictedValue, actualReward, tdError)
+	}
+	
+	return nil
+}
+
+// LogWeightUpdateDetails records detailed information about weight updates
+func (l *Logger) LogWeightUpdateDetails(angle, angularVel, force, reward float64, 
+	angleUpdate, angularVelUpdate, biasUpdate float64, learningRate float64) error {
+	
+	// Create detailed metadata
+	metadata := map[string]interface{}{
+		"angle": angle,
+		"angular_vel": angularVel,
+		"force": force,
+		"reward": reward,
+		"learning_rate": learningRate,
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal weight update metadata: %w", err)
+	}
+	
+	// Log individual weight updates with context
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "angle_weight", angleUpdate, string(metadataJSON)); err != nil {
+		return err
+	}
+	
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "angular_vel_weight", angularVelUpdate, string(metadataJSON)); err != nil {
+		return err
+	}
+	
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "bias", biasUpdate, string(metadataJSON)); err != nil {
+		return err
+	}
+	
+	// Log total update magnitude
+	updateMagnitude := math.Abs(angleUpdate) + math.Abs(angularVelUpdate) + math.Abs(biasUpdate)
+	if err := l.db.RecordMetric(l.sessionID, l.episode, l.step, "update", "magnitude", updateMagnitude, ""); err != nil {
+		return err
+	}
+	
+	// Selectively log to console
+	if l.shouldLogToConsole() {
+		l.stdLogger.Printf("[Metrics] Weight Updates (ep:%d,step:%d): angle=%.4f, angularVel=%.4f, bias=%.4f, magnitude=%.4f",
+			l.episode, l.step, angleUpdate, angularVelUpdate, biasUpdate, updateMagnitude)
+	}
+	
+	return nil
+}
+
+// AnalyzeLearningProgress performs analysis on the learning progress
+func (l *Logger) AnalyzeLearningProgress(lastNEpisodes int) (map[string]interface{}, error) {
+	return l.db.GetLearningProgress(l.sessionID, lastNEpisodes)
+}
+
+// AnalyzePredictionAccuracy analyzes prediction accuracy for a specific episode
+func (l *Logger) AnalyzePredictionAccuracy(episode int) (map[string]interface{}, error) {
+	return l.db.GetPredictionAccuracy(l.sessionID, episode)
+}
+
+// AnalyzeWeightChanges analyzes weight changes for a specific episode
+func (l *Logger) AnalyzeWeightChanges(episode int) (map[string]interface{}, error) {
+	return l.db.GetWeightChangeAnalysis(l.sessionID, episode)
+}
+
+// DetectLearningIssues identifies potential learning problems
+func (l *Logger) DetectLearningIssues() (map[string]interface{}, error) {
+	return l.db.DetectLearningIssues(l.sessionID)
+}
+
+// LogReward records a reward value
+func (l *Logger) LogReward(rewardType string, value float64) error {
+	return l.db.RecordMetric(l.sessionID, l.episode, l.step, "reward", rewardType, value, "")
 }

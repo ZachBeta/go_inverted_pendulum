@@ -47,8 +47,8 @@ type Network struct {
 // NewNetwork creates a network with initialized weights
 func NewNetwork() *Network {
 	net := &Network{
-		angleWeight:      2.0,  // Strong initial response to angle
-		angularVelWeight: 1.0,  // Moderate response to velocity
+		angleWeight:      6.0,  // Further increased for stronger response to angle
+		angularVelWeight: 3.0,  // Further increased for stronger response to velocity
 		bias:            0.0,  // Start with no bias
 		learningRate:    0.05, // Learning rate for quick adaptation
 		lastInputs:      make([]float64, 2),
@@ -136,7 +136,10 @@ func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 	velocity := state.AngularVel
 	
 	// Compute hidden activation
-	hidden := n.angleWeight*angle + n.angularVelWeight*velocity + n.bias
+	// Negate angle and velocity to ensure correct force direction
+	// When pendulum falls right (positive angle), we want negative force (push left)
+	// When pendulum falls left (negative angle), we want positive force (push right)
+	hidden := -n.angleWeight*angle - n.angularVelWeight*velocity + n.bias
 	
 	// Apply activation function (tanh)
 	activation := math.Tanh(hidden)
@@ -170,11 +173,12 @@ func (n *Network) Predict(angleRadians, angularVel float64) float64 {
 		angle += 2 * math.Pi
 	}
 	
-	// Compute hidden activation
-	hidden := n.angleWeight*angle + n.angularVelWeight*angularVel + n.bias
+	// For prediction, we want to value states closer to balance (angle and velocity near zero)
+	// So we use the negative of the absolute values
+	balanceQuality := -math.Abs(angle) - 0.5*math.Abs(angularVel)
 	
-	// Apply activation function (tanh)
-	n.lastValue = math.Tanh(hidden)
+	// Apply activation function (tanh) to normalize to [-1, 1]
+	n.lastValue = math.Tanh(balanceQuality)
 	
 	// Log prediction if metrics available
 	if n.metrics != nil {
@@ -200,12 +204,22 @@ func (n *Network) Update(reward float64) {
 	angularVel := n.lastInputs[1]
 	
 	// Compute update values
-	update := n.learningRate * reward
+	// For correct learning direction, we need to consider the sign of the force
+	// and the sign of the inputs
+	update := n.learningRate * reward * sign(n.lastForce)
 	
 	// Compute weight updates
-	angleUpdate := update * angle
-	angularVelUpdate := update * angularVel
+	// We negate the inputs here to match the negation in ForwardWithActivation
+	angleUpdate := update * (-angle)
+	angularVelUpdate := update * (-angularVel)
 	biasUpdate := update
+	
+	// Calculate TD error if we have a lastValue
+	var tdError float64
+	if n.lastValue != 0 {
+		// TD error is the difference between actual reward and predicted value
+		tdError = reward - n.lastValue
+	}
 	
 	// Apply updates
 	n.angleWeight += angleUpdate
@@ -214,11 +228,32 @@ func (n *Network) Update(reward float64) {
 	
 	// Log updates if metrics available
 	if n.metrics != nil {
+		// Log basic update info
 		n.metrics.LogUpdate(reward, angleUpdate, angularVelUpdate, biasUpdate)
+		
+		// Log detailed weight update information
+		n.metrics.LogWeightUpdateDetails(
+			angle, angularVel, n.lastForce, reward,
+			angleUpdate, angularVelUpdate, biasUpdate, 
+			n.learningRate)
+		
+		// Log immediate reward
+		n.metrics.LogReward("immediate", reward)
+		
+		// Log learning details if we have a lastValue
+		if n.lastValue != 0 {
+			n.metrics.LogLearningDetail(
+				angle, angularVel, n.lastValue, reward, tdError)
+		}
 	} else if n.debug {
 		// Only log to console if no metrics logger and debug is enabled
 		n.logger.Printf("Update: reward=%.4f, updates=[%.4f, %.4f, %.4f]", 
 			reward, angleUpdate, angularVelUpdate, biasUpdate)
+		
+		if n.lastValue != 0 {
+			n.logger.Printf("TD Error: %.4f (reward=%.4f, predicted=%.4f)", 
+				tdError, reward, n.lastValue)
+		}
 	}
 }
 
@@ -265,6 +300,11 @@ func (n *Network) SetLearningRate(rate float64) {
 	} else if n.debug {
 		n.logger.Printf("[Network] Set learning rate: %.4f\n", rate)
 	}
+}
+
+// GetLearningRate returns the current learning rate
+func (n *Network) GetLearningRate() float64 {
+	return n.learningRate
 }
 
 // sign returns the sign of a number: 1 for positive, -1 for negative, 0 for zero

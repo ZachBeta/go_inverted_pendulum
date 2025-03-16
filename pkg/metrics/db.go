@@ -9,6 +9,7 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	"math"
 )
 
 // DB manages the connection to the SQLite database for performance metrics
@@ -325,4 +326,394 @@ func (m *DB) GetEpisodeData(sessionID string, episode int) (map[string]interface
 // GenerateSessionID creates a unique session ID based on timestamp
 func GenerateSessionID() string {
 	return fmt.Sprintf("session_%s", time.Now().Format("20060102_150405"))
+}
+
+// GetLearningProgress analyzes weight changes and prediction accuracy to detect learning issues
+func (m *DB) GetLearningProgress(sessionID string, lastNEpisodes int) (map[string]interface{}, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result map[string]interface{} = make(map[string]interface{})
+
+	// Get the latest episode number
+	var latestEpisode int
+	err := m.db.QueryRow(`
+		SELECT MAX(episode) FROM network_weights WHERE session_id = ?
+	`, sessionID).Scan(&latestEpisode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest episode: %w", err)
+	}
+
+	// Calculate start episode based on lastNEpisodes
+	startEpisode := 0
+	if lastNEpisodes > 0 && latestEpisode >= lastNEpisodes {
+		startEpisode = latestEpisode - lastNEpisodes + 1
+	}
+
+	// Get weight changes across episodes
+	rows, err := m.db.Query(`
+		SELECT episode, angle_weight, angular_vel_weight, bias
+		FROM network_weights 
+		WHERE session_id = ? AND episode >= ?
+		ORDER BY episode
+	`, sessionID, startEpisode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get weight history: %w", err)
+	}
+	defer rows.Close()
+
+	var weightHistory []map[string]interface{}
+	var prevAngleWeight, prevAngularVelWeight, prevBias float64
+	var firstRow bool = true
+
+	for rows.Next() {
+		var episode int
+		var angleWeight, angularVelWeight, bias float64
+		if err := rows.Scan(&episode, &angleWeight, &angularVelWeight, &bias); err != nil {
+			return nil, fmt.Errorf("failed to scan weight row: %w", err)
+		}
+
+		entry := map[string]interface{}{
+			"episode":           episode,
+			"angle_weight":      angleWeight,
+			"angular_vel_weight": angularVelWeight,
+			"bias":              bias,
+		}
+
+		if !firstRow {
+			entry["angle_weight_delta"] = angleWeight - prevAngleWeight
+			entry["angular_vel_weight_delta"] = angularVelWeight - prevAngularVelWeight
+			entry["bias_delta"] = bias - prevBias
+			
+			// Calculate magnitude of weight change
+			deltaSum := math.Abs(angleWeight - prevAngleWeight) + 
+				math.Abs(angularVelWeight - prevAngularVelWeight) + 
+				math.Abs(bias - prevBias)
+			entry["weight_change_magnitude"] = deltaSum
+		}
+
+		weightHistory = append(weightHistory, entry)
+		prevAngleWeight, prevAngularVelWeight, prevBias = angleWeight, angularVelWeight, bias
+		firstRow = false
+	}
+
+	result["weight_history"] = weightHistory
+
+	// Analyze reward trends
+	rows, err = m.db.Query(`
+		SELECT episode, total_reward, success
+		FROM training_episodes 
+		WHERE session_id = ? AND episode >= ?
+		ORDER BY episode
+	`, sessionID, startEpisode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get reward history: %w", err)
+	}
+	defer rows.Close()
+
+	var rewardHistory []map[string]interface{}
+	var successCount, totalEpisodes int
+	var totalReward float64
+
+	for rows.Next() {
+		var episode int
+		var reward float64
+		var success bool
+		if err := rows.Scan(&episode, &reward, &success); err != nil {
+			return nil, fmt.Errorf("failed to scan reward row: %w", err)
+		}
+
+		rewardHistory = append(rewardHistory, map[string]interface{}{
+			"episode": episode,
+			"reward":  reward,
+			"success": success,
+		})
+
+		if success {
+			successCount++
+		}
+		totalReward += reward
+		totalEpisodes++
+	}
+
+	result["reward_history"] = rewardHistory
+	
+	if totalEpisodes > 0 {
+		result["success_rate"] = float64(successCount) / float64(totalEpisodes)
+		result["avg_reward"] = totalReward / float64(totalEpisodes)
+	}
+
+	// Detect learning stagnation
+	if len(weightHistory) >= 5 {
+		// Calculate average weight change magnitude over last 5 episodes
+		var totalMagnitude float64
+		count := 0
+		for i := len(weightHistory) - 5; i < len(weightHistory); i++ {
+			if i > 0 && weightHistory[i]["weight_change_magnitude"] != nil {
+				totalMagnitude += weightHistory[i]["weight_change_magnitude"].(float64)
+				count++
+			}
+		}
+		
+		var avgMagnitude float64
+		if count > 0 {
+			avgMagnitude = totalMagnitude / float64(count)
+		}
+		
+		result["avg_weight_change_magnitude"] = avgMagnitude
+		result["learning_stagnated"] = avgMagnitude < 0.001 // Threshold for stagnation
+	}
+
+	return result, nil
+}
+
+// GetPredictionAccuracy analyzes how well the network's predictions match actual outcomes
+func (m *DB) GetPredictionAccuracy(sessionID string, episode int) (map[string]interface{}, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result map[string]interface{} = make(map[string]interface{})
+
+	// Get state value predictions and corresponding rewards
+	rows, err := m.db.Query(`
+		SELECT m1.step, m1.value as prediction, m2.value as reward
+		FROM network_metrics m1
+		JOIN network_metrics m2 ON m1.session_id = m2.session_id 
+			AND m1.episode = m2.episode 
+			AND m1.step = m2.step
+		WHERE m1.session_id = ? 
+			AND m1.episode = ? 
+			AND m1.metric_type = 'prediction' 
+			AND m1.metric_name = 'state_value'
+			AND m2.metric_type = 'reward' 
+			AND m2.metric_name = 'immediate'
+		ORDER BY m1.step
+	`, sessionID, episode)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get prediction data: %w", err)
+	}
+	defer rows.Close()
+
+	var predictions []map[string]interface{}
+	var totalError, count float64
+
+	for rows.Next() {
+		var step int
+		var prediction, reward float64
+		if err := rows.Scan(&step, &prediction, &reward); err != nil {
+			return nil, fmt.Errorf("failed to scan prediction row: %w", err)
+		}
+
+		// Calculate prediction error
+		error := math.Abs(prediction - reward)
+		
+		predictions = append(predictions, map[string]interface{}{
+			"step":       step,
+			"prediction": prediction,
+			"reward":     reward,
+			"error":      error,
+		})
+
+		totalError += error
+		count++
+	}
+
+	result["predictions"] = predictions
+	
+	if count > 0 {
+		result["avg_prediction_error"] = totalError / count
+	}
+
+	return result, nil
+}
+
+// GetWeightChangeAnalysis provides detailed analysis of how weights change in response to inputs
+func (m *DB) GetWeightChangeAnalysis(sessionID string, episode int) (map[string]interface{}, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result map[string]interface{} = make(map[string]interface{})
+
+	// Get input values and corresponding weight updates
+	rows, err := m.db.Query(`
+		SELECT 
+			m1.step, 
+			m1.value as angle, 
+			m2.value as angular_vel,
+			m3.value as angle_update,
+			m4.value as angular_vel_update,
+			m5.value as bias_update,
+			m6.value as reward
+		FROM network_metrics m1
+		JOIN network_metrics m2 ON m1.session_id = m2.session_id AND m1.episode = m2.episode AND m1.step = m2.step
+		JOIN network_metrics m3 ON m1.session_id = m3.session_id AND m1.episode = m3.episode AND m1.step = m3.step
+		JOIN network_metrics m4 ON m1.session_id = m4.session_id AND m1.episode = m4.episode AND m1.step = m4.step
+		JOIN network_metrics m5 ON m1.session_id = m5.session_id AND m1.episode = m5.episode AND m1.step = m5.step
+		JOIN network_metrics m6 ON m1.session_id = m6.session_id AND m1.episode = m6.episode AND m1.step = m6.step
+		WHERE m1.session_id = ? 
+			AND m1.episode = ? 
+			AND m1.metric_type = 'input' AND m1.metric_name = 'angle'
+			AND m2.metric_type = 'input' AND m2.metric_name = 'angular_vel'
+			AND m3.metric_type = 'update' AND m3.metric_name = 'angle_weight'
+			AND m4.metric_type = 'update' AND m4.metric_name = 'angular_vel_weight'
+			AND m5.metric_type = 'update' AND m5.metric_name = 'bias'
+			AND m6.metric_type = 'reward' AND m6.metric_name = 'immediate'
+		ORDER BY m1.step
+	`, sessionID, episode)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get weight update data: %w", err)
+	}
+	defer rows.Close()
+
+	var updates []map[string]interface{}
+
+	for rows.Next() {
+		var step int
+		var angle, angularVel, angleUpdate, angularVelUpdate, biasUpdate, reward float64
+		if err := rows.Scan(&step, &angle, &angularVel, &angleUpdate, &angularVelUpdate, &biasUpdate, &reward); err != nil {
+			return nil, fmt.Errorf("failed to scan update row: %w", err)
+		}
+
+		updates = append(updates, map[string]interface{}{
+			"step":                step,
+			"angle":               angle,
+			"angular_vel":         angularVel,
+			"angle_weight_update": angleUpdate,
+			"angular_vel_weight_update": angularVelUpdate,
+			"bias_update":         biasUpdate,
+			"reward":              reward,
+			"update_magnitude":    math.Abs(angleUpdate) + math.Abs(angularVelUpdate) + math.Abs(biasUpdate),
+		})
+	}
+
+	result["weight_updates"] = updates
+
+	return result, nil
+}
+
+// DetectLearningIssues analyzes metrics to identify potential learning problems
+func (m *DB) DetectLearningIssues(sessionID string) (map[string]interface{}, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result map[string]interface{} = make(map[string]interface{})
+	var issues []string
+
+	// Check for weight stagnation
+	rows, err := m.db.Query(`
+		SELECT episode, angle_weight, angular_vel_weight, bias
+		FROM network_weights 
+		WHERE session_id = ? 
+		ORDER BY episode DESC
+		LIMIT 10
+	`, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent weights: %w", err)
+	}
+	defer rows.Close()
+
+	var weights []map[string]float64
+	for rows.Next() {
+		var episode int
+		var angleWeight, angularVelWeight, bias float64
+		if err := rows.Scan(&episode, &angleWeight, &angularVelWeight, &bias); err != nil {
+			return nil, fmt.Errorf("failed to scan weight row: %w", err)
+		}
+
+		weights = append(weights, map[string]float64{
+			"episode":           float64(episode),
+			"angle_weight":      angleWeight,
+			"angular_vel_weight": angularVelWeight,
+			"bias":              bias,
+		})
+	}
+
+	// Check for weight stagnation
+	if len(weights) >= 5 {
+		var totalChange float64
+		for i := 0; i < len(weights)-1; i++ {
+			totalChange += math.Abs(weights[i]["angle_weight"] - weights[i+1]["angle_weight"])
+			totalChange += math.Abs(weights[i]["angular_vel_weight"] - weights[i+1]["angular_vel_weight"])
+			totalChange += math.Abs(weights[i]["bias"] - weights[i+1]["bias"])
+		}
+		
+		avgChange := totalChange / float64(len(weights)-1) / 3.0 // 3 weights
+		result["avg_weight_change"] = avgChange
+		
+		if avgChange < 0.0001 {
+			issues = append(issues, "Weight stagnation detected - weights barely changing")
+		}
+	}
+
+	// Check for reward trends
+	rows, err = m.db.Query(`
+		SELECT episode, total_reward
+		FROM training_episodes 
+		WHERE session_id = ? 
+		ORDER BY episode DESC
+		LIMIT 10
+	`, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent rewards: %w", err)
+	}
+	defer rows.Close()
+
+	var rewards []float64
+	var episodes []int
+	for rows.Next() {
+		var episode int
+		var reward float64
+		if err := rows.Scan(&episode, &reward); err != nil {
+			return nil, fmt.Errorf("failed to scan reward row: %w", err)
+		}
+
+		rewards = append(rewards, reward)
+		episodes = append(episodes, episode)
+	}
+
+	// Check for reward improvement
+	if len(rewards) >= 5 {
+		// Reverse arrays to get chronological order
+		for i, j := 0, len(rewards)-1; i < j; i, j = i+1, j-1 {
+			rewards[i], rewards[j] = rewards[j], rewards[i]
+			episodes[i], episodes[j] = episodes[j], episodes[i]
+		}
+		
+		// Simple linear regression to check trend
+		var sumX, sumY, sumXY, sumX2 float64
+		n := float64(len(rewards))
+		
+		for i := 0; i < len(rewards); i++ {
+			x := float64(episodes[i])
+			y := rewards[i]
+			sumX += x
+			sumY += y
+			sumXY += x * y
+			sumX2 += x * x
+		}
+		
+		slope := (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX)
+		result["reward_trend_slope"] = slope
+		
+		if slope <= 0 {
+			issues = append(issues, "No improvement in rewards over recent episodes")
+		}
+	}
+
+	// Check for extreme weight values
+	if len(weights) > 0 {
+		latest := weights[0]
+		if math.Abs(latest["angle_weight"]) > 50 || 
+		   math.Abs(latest["angular_vel_weight"]) > 50 || 
+		   math.Abs(latest["bias"]) > 50 {
+			issues = append(issues, "Extreme weight values detected - possible exploding gradients")
+		}
+	}
+
+	result["issues"] = issues
+	result["issue_count"] = len(issues)
+
+	return result, nil
 }
