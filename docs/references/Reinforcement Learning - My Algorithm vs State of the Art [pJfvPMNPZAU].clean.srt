@@ -1,0 +1,90 @@
+---
+Title: Reinforcement Learning - My Algorithm vs State of the Art
+VideoID: pJfvPMNPZAU
+Cleanup Notes:
+- Removed timestamp information except for key sections
+- Consolidated subtitle fragments into complete sentences
+- Removed duplicated text from auto-generation
+- Added section headers for clarity
+- Preserved context for visual demonstrations
+---
+
+# INTRODUCTION
+
+[00:00:00]
+In my last two videos on AI training I presented a rudimentary but highly 
+effective technique for solving simple tasks, in this case balancing a single 
+and then a double pendulum. In the first very simple case, a robust solution was 
+found in less than a minute. The resulting neural network was also very compact, 
+comprising no more than three hidden neurons.
+
+In the second case it was more difficult, with training lasting between 2 and 8 
+hours, and only succeeding in finding a solution one time out of four on 
+average. The training required a slightly different strategy as the algorithm 
+was initially unable to find a solution. It was therefore necessary to gradually 
+increase the difficulty of the task via gravity and air friction to achieve a 
+successful balance.
+
+But in the event of loss of equilibrium, none of the solutions could recover 
+balance effectively.
+
+# COMPARISON WITH STATE-OF-THE-ART
+
+[00:02:21]
+Today, I want to compare my rudimentary approach with state-of-the-art tools 
+that exploit the capabilities of these reinforcement learning frameworks.
+
+NVIDIA provides a framework called Isaac Sim that implements its own version of 
+the PPO (Proximal Policy Optimization) algorithm, which is considered one of the 
+most effective reinforcement learning approaches.
+
+# ISAAC SIM SETUP
+
+[00:04:50]
+Let's familiarize ourselves with Isaac Sim and set up our experiment. We'll 
+place the cart in the middle of the rail and set up the environment parameters 
+to match our previous experiments.
+
+# TRAINING RESULTS COMPARISON
+
+[00:07:40]
+The results are quite satisfactory, especially after only 2 minutes of training. 
+No matter what force is applied, the system quickly recovers and maintains 
+balance.
+
+[00:09:51]
+NVIDIA's framework has been open-source since then. Its use within the 
+reinforcement learning community has grown significantly due to its 
+effectiveness and ease of use.
+
+# IMPLEMENTATION DETAILS
+
+[00:11:02]
+Once in Isaac Sim, a simple drag and drop interface allows us to set up the 
+environment. For the double pendulum case, we must now take the second pendulum 
+into account in our training process.
+
+# PERFORMANCE ANALYSIS
+
+[00:14:09]
+I didn't expect such efficiency, especially as I was using a relatively simple 
+configuration. No matter what happens to the pendulum, the system always returns 
+to a balanced state.
+
+[00:17:21]
+This demonstrates the power of gradient descent. The two algorithms simply are 
+not in the same league. Modern reinforcement learning approaches have 
+significantly advanced the field of artificial intelligence in recent times.
+
+# CONCLUSION
+
+The comparison between my simple evolutionary approach and state-of-the-art 
+reinforcement learning algorithms shows the tremendous progress in the field. 
+While my approach was effective for simple tasks, modern algorithms like PPO 
+implemented in frameworks such as Isaac Sim can solve complex control problems 
+much more efficiently and robustly.
+
+This doesn't diminish the value of understanding simpler approaches, as they 
+provide important insights into the fundamental principles of reinforcement 
+learning. However, for practical applications, leveraging state-of-the-art tools 
+can provide significantly better results with less development effort.

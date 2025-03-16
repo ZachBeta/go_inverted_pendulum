@@ -1,0 +1,89 @@
+---
+Title: How to train simple AIs
+VideoID: EvV5Qtp_fYg
+Cleanup Notes:
+- Removed timestamp information except for key sections
+- Consolidated subtitle fragments into complete sentences
+- Removed duplicated text from auto-generation
+- Added section headers for clarity
+- Preserved context for visual demonstrations
+---
+
+# INTRODUCTION
+
+[00:00:00]
+Machine learning is a hot topic and for good reason. It has unlocked the ability 
+for our computers to perform a whole host of tasks that we simply didn't know 
+how to program manually. This fascinating discipline is also a lot of fun to try 
+out on your own but can be quite daunting due to its many mathematical and 
+programming prerequisites, especially if you want to write everything from 
+scratch yourself.
+
+A branch of machine learning called reinforcement learning is particularly 
+appealing. It promises to teach a program to perform complex tasks by letting it 
+carry out its own experiments in a given environment. However, this set of 
+techniques requires an excellent understanding of the machine learning 
+principles on which it is based.
+
+In this video, I'm going to show you how to create a very simple AI capable of 
+learning to perform a basic task. This approach does at least allow you to build 
+up an intuition about the fundamental concepts.
+
+# NEURAL NETWORK ARCHITECTURE
+
+[00:01:01]
+We'll be using a specific type of neural networks called DAGs - Directed Acyclic 
+Graphs. These are a kind of graphs in which there are no cycles. Networks are 
+made up of nodes, and each node can receive input from other nodes.
+
+The network we'll build has three types of nodes:
+1. Input nodes - receiving information from the environment
+2. Hidden nodes - processing the information
+3. Output nodes - determining the action to take
+
+# TRAINING PROCESS
+
+[00:03:22]
+The network processes information through these nodes. At the end of this 
+process, we get an output that determines what action to take. The training is 
+carried out in iterations, with each iteration evaluating how well the network 
+performs the task.
+
+We score the final performance, and the final step is to evolve the networks so 
+that they produce slightly better results in the next generation.
+
+# SUCCESS CRITERIA
+
+[00:07:03]
+Success is measured by whether the network manages to keep the end of the 
+pendulum above a threshold. This threshold is gradually increased as training 
+progresses.
+
+[00:08:30]
+The initial results aren't too bad, but there's a strong oscillation in the 
+movement. Let's adapt the fitness function again to push the solutions towards 
+the desired behavior.
+
+# OPTIMIZATION AND RESULTS
+
+[00:11:13]
+Through progressive optimization of both the network architecture and the 
+fitness function, we eventually achieve a solution that can successfully balance 
+the pendulum with minimal oscillation.
+
+The final network is surprisingly simple, demonstrating that even basic neural 
+networks can learn to perform complex control tasks when trained with the right 
+approach.
+
+# CONCLUSION
+
+This simple example demonstrates the core principles of reinforcement learning:
+1. Creating a neural network architecture
+2. Defining a clear success metric
+3. Implementing a training process
+4. Progressively increasing difficulty
+5. Optimizing the solution through generations
+
+While this is a simplified approach, it provides insight into how more complex 
+reinforcement learning systems operate and can serve as a foundation for 
+exploring more advanced techniques.

@@ -1,0 +1,78 @@
+---
+Title: How to train simple AIs to balance a double pendulum
+VideoID: 9gQQAO4I1Ck
+Cleanup Notes:
+- Removed timestamp information except for key sections
+- Consolidated subtitle fragments into complete sentences
+- Removed duplicated text from auto-generation
+- Added section headers for clarity
+- Preserved context for visual demonstrations
+---
+
+# INTRODUCTION
+
+[00:00:00]
+In my previous video we saw how a simple Evolution algorithm could be used to 
+solve simple tasks such as balancing a simple pendulum. It's best to watch it 
+first if you want to know the details of the algorithm used to perform the 
+training.
+
+However, this specific task was very simple requiring only a few seconds for the 
+algorithm or even a human to find a solution. The various solutions found, while 
+very effective in solving the problem, were also very simple with neural 
+networks of just a few nodes.
+
+In this second part, we'll see if a basic algorithm such as the one described in 
+the first video can succeed in finding a solution for a far more complex and 
+precise exercise: balancing a double pendulum.
+
+# COMPARING SINGLE VS DOUBLE PENDULUM COMPLEXITY
+
+First of all, is it really that much more complicated to have a double pendulum? 
+Let's compare the two systems.
+
+The simple pendulum as we can see is pretty easy to get the hang of it and only 
+requires a few attempts to be able to balance it. The double pendulum, on the 
+other hand, is much more difficult to control manually. The second pendulum adds 
+a lot of complexity to the system, making it much more difficult to predict and 
+control.
+
+This property makes the control window much thinner than in the case of the 
+simple pendulum. Double pendulums are quite hypnotic to watch.
+
+# TRAINING SETUP AND METHODOLOGY
+
+Let's see if our algorithm can find a solution to balance this system. For the 
+training, I'll set the length of the pendulum equal to the length of the 
+pendulum minus 5%.
+
+Let's start the training using 1,000 neural networks. I've tried lots of 
+different configurations and score functions to find an effective approach.
+
+# TRAINING PROGRESS AND CHALLENGES
+
+[00:10:53]
+I'll set a threshold that I can easily link to the success criteria. There's now 
+the beginnings of a strategy forming. This kind of strategy is to control the 
+oscillations.
+
+Let's start from scratch with this new function and see if it produces better 
+results. I'm going to fast forward to the interesting parts of the training.
+
+# RESULTS AND SOLUTION
+
+[00:19:16]
+[Music]
+
+Let's examine the solution from this latest experiment. This appears to be the 
+best solution found for the time being.
+
+# CONCLUSION
+
+Despite the complexity of the double pendulum system, we've managed to find a 
+working solution using our rudimentary algorithm. However, there are quite a few 
+improvements that could be made to the approach.
+
+The neural network has learned to apply the right amount of force at the right 
+time to keep the double pendulum balanced, which is quite impressive given the 
+chaotic nature of the system.

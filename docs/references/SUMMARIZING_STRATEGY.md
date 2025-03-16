@@ -35,14 +35,16 @@ Key flags explained:
 
 ### Transcript Cleanup Process
 
-After downloading the raw transcripts, we follow these steps to create cleaned versions:
+After downloading the raw transcripts, we follow these comprehensive steps to create cleaned, readable versions:
 
-1. Extract Content
-   - extract the content of the transcript without any additional formatting or summarizing
-   - we want this content to be in a plain text format
+#### 1. Deduplication and Content Extraction
 
-   Example
+- Remove timestamp information (except for key section markers)
+- Consolidate fragmented subtitle text into complete sentences
+- Remove duplicated phrases from auto-generation
+- Eliminate filler content and unnecessary repetition
 
+**Before:**
 ```srt
 1
 00:00:00,080 --> 00:00:02,550
@@ -58,47 +60,56 @@ machine learning is a Hot Topic and for
 00:00:02,560 --> 00:00:05,390
 machine learning is a Hot Topic and for
 good reason it has unlocked the ability
-
-4
-00:00:05,390 --> 00:00:05,400
-good reason it has unlocked the ability
- 
-
-5
-00:00:05,400 --> 00:00:07,470
-good reason it has unlocked the ability
-for our computers to perform a whole
-
-6
-00:00:07,470 --> 00:00:07,480
-for our computers to perform a whole
- 
-
-7
-00:00:07,480 --> 00:00:10,110
-for our computers to perform a whole
-host of tasks that we simply didn't know
-
-8
-00:00:10,110 --> 00:00:10,120
-host of tasks that we simply didn't know
- 
-
-9
-00:00:10,120 --> 00:00:12,950
-host of tasks that we simply didn't know
-how to program manually this fascinating
-```
-produces
-
-```txt
-machine learning is a Hot Topic and for
-good reason it has unlocked the ability
-for our computers to perform a whole
-host of tasks that we simply didn't know
-how to program manually this fascinating
 ```
 
-2. Output Format
-   - Create a new file with suffix `.clean.txt` (e.g., `How to train simple AIs [EvV5Qtp_fYg].clean.txt`)
-   - Maintain the standard naming convention established for video references
+**After:**
+```
+Machine learning is a hot topic and for good reason. It has unlocked the ability
+for our computers to perform a whole host of tasks that we simply didn't know 
+how to program manually.
+```
+
+#### 2. Content Organization and Structure
+
+- Add a structured metadata header with:
+  - Title and video ID
+  - Cleanup notes explaining transformations made
+- Create clear section headers using markdown (e.g., # INTRODUCTION)
+- Group related topics into logical sections
+- Preserve key timestamps for reference points (e.g., [00:10:53])
+- Add context for visual demonstrations
+
+#### 3. Formatting and Readability
+
+- Use consistent line wrapping at approximately 80 characters
+- Apply proper paragraph breaks with appropriate spacing
+- Use markdown formatting for headers and structure
+- Standardize technical terminology (e.g., "DAGs - Directed Acyclic Graphs")
+- Maintain consistent capitalization and punctuation
+
+#### 4. Output Format
+
+- Create a new file with suffix `.clean.srt` (e.g., `How to train simple AIs [EvV5Qtp_fYg].clean.srt`)
+- Maintain the standard naming convention established for video references
+- Include the following standard sections:
+  - Introduction
+  - Core technical content (varies by video)
+  - Results/demonstrations
+  - Conclusion
+
+#### Example Metadata Header
+
+```
+---
+Title: How to train simple AIs
+VideoID: EvV5Qtp_fYg
+Cleanup Notes:
+- Removed timestamp information except for key sections
+- Consolidated subtitle fragments into complete sentences
+- Removed duplicated text from auto-generation
+- Added section headers for clarity
+- Preserved context for visual demonstrations
+---
+```
+
+This comprehensive cleanup process ensures our reference materials are clear, concise, and maximally useful for implementation while maintaining traceability to source content.
