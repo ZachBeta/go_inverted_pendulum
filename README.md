@@ -5,6 +5,7 @@ A Go-based framework implementing neural network control for the inverted pendul
 ## Overview
 This project implements neural network control in Go, focusing on:
 - Neural network architecture with DAG-based representation
+- NEAT algorithm
 - Learned action space (-5N to +5N force control)
 - Real-time performance optimization
 - Environment simulation with accurate physics
@@ -84,8 +85,6 @@ This project extends Pezzza's original neural network implementation. Key featur
 - Real-time performance optimization
 - Comprehensive testing framework
 - Evolutionary architecture
-
-For implementation insights and video references, see our [architecture documentation](docs/ARCHITECTURE.md).
 
 ## License
 See [LICENSE](LICENSE) file for details.
