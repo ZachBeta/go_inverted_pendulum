@@ -23,47 +23,56 @@
   * [x] Performance benchmarks
 
 # Priority
-* source whitepapers on neural networks referenced in the video, things like NEAT and PPO and anything else evolutionary or reinforcement learning, and how to select populations, replication, modification, etc
+* DAG-Based Network Implementation
+  * [ ] Node structure (ID, bias, value, activation)
+  * [ ] Connection structure (source/target, weight, enabled)
+  * [ ] Topological sorting implementation
+  * [ ] Innovation number tracking
+  * [ ] Network state validation
 
+* NEAT Evolution Pipeline
+  * [ ] Evaluation phase implementation
+  * [ ] Selection mechanism (top 30%)
+  * [ ] Score-based random selection
+  * [ ] Mutation operators:
+    * [ ] New connection creation
+    * [ ] Connection splitting
+    * [ ] Weight modification
+  * [ ] Population management
 
-* Temporal Difference (TD) Learning
-  * [ ] Enhanced Predict method for state value estimation
-  * [ ] Momentum-based backpropagation
-  * [ ] Progressive learning with reward prioritization
-  * [ ] Adaptive learning rate based on success rate
-
-* Network State Persistence
-  * [ ] Network state serialization
-  * [ ] Save/load functionality
-  * [ ] Training checkpoint system
-  * [ ] Progress persistence format
-
-* Progressive Training
-  * [ ] Dynamic difficulty scaling
-  * [ ] Success rate monitoring
-  * [ ] Performance-based progression
-  * [ ] Checkpoint validation
+* Performance Optimization
+  * [ ] Goroutine parallelization for node processing
+  * [ ] Matrix operations for layered networks
+  * [ ] Batch processing capability
+  * [ ] Memory usage optimization
 
 # Next
-* Training Optimization
-  * [ ] Batch processing
-  * [ ] Weight matrix operations
-  * [ ] Memory usage monitoring
-  * [ ] Enhanced checkpoint system
+* Training Pipeline Enhancement
+  * [ ] Progressive learning implementation
+  * [ ] Dynamic difficulty adjustment
+  * [ ] Success rate monitoring
+  * [ ] Training checkpoints
 
-* Visualization Enhancement
-  * [ ] Real-time training metrics
-  * [ ] Network architecture display
-  * [ ] Learning progress indicators
+* Network State Management
+  * [ ] State serialization format
+  * [ ] Save/load functionality
+  * [ ] Training progress persistence
+  * [ ] Network architecture versioning
+
+* Visualization Improvements
+  * [ ] Network topology display
+  * [ ] Real-time evolution metrics
+  * [ ] Training progress indicators
   * [ ] Performance graphs
 
 # Documentation
-* [ ] Update ARCHITECTURE.md with TD learning design
-* [ ] Document training methodology in PROGRESS.md
-* [ ] API documentation with examples
-* [ ] Learning progress tracking
+* [ ] NEAT implementation guide
+* [ ] Evolution strategy documentation
+* [ ] Performance optimization notes
+* [ ] API examples and usage
 
-# Future
-* [ ] Double pendulum support
-* [ ] Advanced training algorithms
-* [ ] Performance comparisons
+# References
+* [ ] Source NEAT paper
+* [ ] Study Pendulum-NEAT implementation
+* [ ] Review topological sorting algorithms
+* [ ] Document evolutionary strategies
