@@ -55,10 +55,10 @@ type Network struct {
 // NewNetwork creates a network with initialized weights
 func NewNetwork() *Network {
 	net := &Network{
-		angleWeight:      6.0,  // Further increased for stronger response to angle
-		angularVelWeight: 3.0,  // Further increased for stronger response to velocity
+		angleWeight:      6.0,  // Base weight for angle
+		angularVelWeight: 3.0,  // Base weight for velocity
 		bias:            0.0,  // Start with no bias
-		learningRate:    0.05, // Learning rate for quick adaptation
+		learningRate:    0.1,  // Base learning rate
 		lastInputs:      make([]float64, 2),
 		difficulty:      0.1,  // Start with low difficulty
 		successRate:     0.0,  // Initial success rate
@@ -129,84 +129,38 @@ func (n *Network) IncrementStep() {
 	}
 }
 
-// Forward performs a forward pass through the network
+// Forward performs forward propagation through the network
 // Returns a force value in [-5, 5] Newtons
 func (n *Network) Forward(state env.State) float64 {
-	force, _ := n.ForwardWithActivation(state)
+	// Store inputs for later use in backpropagation
+	n.lastInputs[0] = state.AngleRadians
+	n.lastInputs[1] = state.AngularVel
+	
+	// Get raw activation
+	force, activation := n.ForwardWithActivation(state)
+	n.lastValue = activation
+	
 	return force
 }
 
 // ForwardWithActivation performs a forward pass and returns both the force and hidden layer activation
 func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
-	// Normalize angle to [-π, π] range
-	angle := math.Mod(state.AngleRadians, 2*math.Pi)
-	if angle > math.Pi {
-		angle -= 2 * math.Pi
-	} else if angle < -math.Pi {
-		angle += 2 * math.Pi
-	}
+	// Compute hidden layer activation (value prediction)
+	activation := -n.angleWeight*state.AngleRadians - n.angularVelWeight*state.AngularVel + n.bias
 	
-	// Get angular velocity
-	velocity := state.AngularVel
+	// Scale activation to force range [-5, 5] with tanh
+	// Use higher gain (2.0) for more aggressive response
+	force := 5.0 * math.Tanh(2.0*activation)
 	
-	// Compute hidden activation
-	// Negate angle and velocity to ensure correct force direction
-	// When pendulum falls right (positive angle), we want negative force (push left)
-	// When pendulum falls left (negative angle), we want positive force (push right)
-	hidden := -n.angleWeight*angle - n.angularVelWeight*velocity + n.bias
-	
-	// Apply activation function (tanh)
-	activation := math.Tanh(hidden)
-	
-	// Scale to force range [-5, 5] Newtons
-	force := activation * 5.0
-	
-	// Store for learning
-	n.lastForce = force
-	n.lastInputs = []float64{angle, velocity}
-	
-	// Log metrics if available
-	if n.metrics != nil {
-		n.metrics.LogForwardPass(angle, velocity, force, hidden)
-	} else if n.debug {
-		// Only log to console if no metrics logger and debug is enabled
-		n.logger.Printf("Forward: angle=%.4f, velocity=%.4f → force=%.4f", angle, velocity, force)
-	}
-	
-	return force, hidden
+	return force, activation
 }
 
-// Predict estimates the value of a state for temporal difference learning
-// Returns a value in [-1, 1] representing the estimated "goodness" of the state
-func (n *Network) Predict(angleRadians, angularVel float64) float64 {
-	// Normalize angle to [-π, π] range
-	angle := math.Mod(angleRadians, 2*math.Pi)
-	if angle > math.Pi {
-		angle -= 2 * math.Pi
-	} else if angle < -math.Pi {
-		angle += 2 * math.Pi
-	}
-	
-	// For prediction, we want to value states closer to balance (angle and velocity near zero)
-	// So we use the negative of the absolute values
-	balanceQuality := -math.Abs(angle) - 0.5*math.Abs(angularVel)
-	
-	// Apply activation function (tanh) to normalize to [-1, 1]
-	n.lastValue = math.Tanh(balanceQuality)
-	
-	// Log prediction if metrics available
-	if n.metrics != nil {
-		n.metrics.LogPrediction(angle, angularVel, n.lastValue)
-	} else if n.debug {
-		// Only log to console if no metrics logger and debug is enabled
-		n.logger.Printf("Predict: angle=%.4f, velocity=%.4f → value=%.4f", angle, angularVel, n.lastValue)
-	}
-	
-	return n.lastValue
+// Predict returns the network's value prediction for a given state
+func (n *Network) Predict(angle, angularVel float64) float64 {
+	return -n.angleWeight*angle - n.angularVelWeight*angularVel + n.bias
 }
 
 // Update adjusts weights based on the reward received
-// reward should be in [-1, 1] range
 func (n *Network) Update(reward float64) {
 	// Ensure we have previous inputs
 	if len(n.lastInputs) != 2 {
@@ -218,25 +172,44 @@ func (n *Network) Update(reward float64) {
 	n.updateSuccessRate(success)
 	
 	// Scale reward by difficulty for more aggressive learning at higher difficulties
-	scaledReward := reward * (0.5 + 0.5*n.difficulty)
+	scaledReward := reward * (1.0 + n.difficulty)
 	
-	// Compute error gradient
-	error := scaledReward - n.lastValue
+	// Compute TD error (difference between actual and predicted)
+	tdError := scaledReward - n.lastValue
 	
-	// Apply learning rate (increased at higher difficulties)
-	effectiveLR := n.learningRate * (1.0 + n.difficulty)
+	// Apply learning rate with difficulty scaling
+	// Use linear scaling for more predictable learning magnitudes
+	effectiveLR := n.learningRate * (0.5 + n.difficulty)
 	
-	// Update weights with momentum
-	n.angleWeight += effectiveLR * error * n.lastInputs[0]
-	n.angularVelWeight += effectiveLR * error * n.lastInputs[1]
-	n.bias += effectiveLR * error
+	// Extract inputs
+	angle := n.lastInputs[0]
+	angularVel := n.lastInputs[1]
+	
+	// Compute weight updates with momentum
+	angleUpdate := effectiveLR * tdError * (-angle)
+	angularVelUpdate := effectiveLR * tdError * (-angularVel)
+	biasUpdate := effectiveLR * tdError
+	
+	// Apply updates with momentum (20% of previous update)
+	n.angleWeight += angleUpdate * 1.2
+	n.angularVelWeight += angularVelUpdate * 1.2
+	n.bias += biasUpdate * 1.2
+	
+	// Adapt learning rate based on success
+	if success {
+		// Increase learning rate moderately for success
+		n.learningRate = math.Min(0.2, n.learningRate*1.02)
+	} else {
+		// Decrease learning rate more aggressively for failures
+		n.learningRate = math.Max(0.05, n.learningRate*0.95)
+	}
 	
 	// Log update if metrics available
 	if n.metrics != nil {
-		n.metrics.LogUpdate(error, n.angleWeight, n.angularVelWeight, n.bias, n.difficulty, n.successRate)
+		n.metrics.LogUpdate(tdError, n.angleWeight, n.angularVelWeight, n.bias, n.difficulty, n.successRate)
 	} else if n.debug {
 		n.logger.Printf("Update: reward=%.4f, error=%.4f, new_weights=[%.4f, %.4f, %.4f]",
-			reward, error, n.angleWeight, n.angularVelWeight, n.bias)
+			reward, tdError, n.angleWeight, n.angularVelWeight, n.bias)
 	}
 }
 
@@ -259,8 +232,8 @@ func (n *Network) updateSuccessRate(success bool) {
 	}
 	n.successRate = float64(successes) / float64(len(n.successWindow))
 	
-	// Adjust difficulty based on success rate
-	if len(n.successWindow) >= n.windowSize/2 { // Wait for sufficient data
+	// Adjust difficulty based on success rate if we have enough data
+	if len(n.successWindow) >= n.windowSize/2 {
 		if n.successRate >= n.progressThresh {
 			n.increaseDifficulty()
 		} else if n.successRate <= n.regressThresh {
@@ -272,7 +245,8 @@ func (n *Network) updateSuccessRate(success bool) {
 // increaseDifficulty increases the training difficulty
 func (n *Network) increaseDifficulty() {
 	oldDiff := n.difficulty
-	n.difficulty = math.Min(1.0, n.difficulty*1.2) // 20% increase, capped at 1.0
+	// More moderate increase (20%) to maintain stability
+	n.difficulty = math.Min(1.0, n.difficulty*1.2)
 	
 	if n.metrics != nil {
 		n.metrics.LogDifficultyChange(oldDiff, n.difficulty, "increase")
@@ -284,7 +258,8 @@ func (n *Network) increaseDifficulty() {
 // decreaseDifficulty decreases the training difficulty
 func (n *Network) decreaseDifficulty() {
 	oldDiff := n.difficulty
-	n.difficulty = math.Max(0.1, n.difficulty*0.8) // 20% decrease, minimum 0.1
+	// More aggressive decrease (70%) when struggling
+	n.difficulty = math.Max(0.05, n.difficulty*0.3)
 	
 	if n.metrics != nil {
 		n.metrics.LogDifficultyChange(oldDiff, n.difficulty, "decrease")
