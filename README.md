@@ -5,7 +5,9 @@ A Go-based framework implementing neural network control for the inverted pendul
 ## Overview
 This project implements neural network control in Go, focusing on:
 - Neural network architecture with DAG-based representation
-- NEAT algorithm
+- Three-node design (input, hidden, output layers)
+- Progressive learning with increasing difficulty
+- Temporal difference learning
 - Learned action space (-5N to +5N force control)
 - Real-time performance optimization
 - Environment simulation with accurate physics
@@ -79,12 +81,25 @@ For current project status and next steps, see [PROGRESS.md](docs/PROGRESS.md).
 - [Ebiten](https://github.com/hajimehoshi/ebiten) v2.8.6 (for visualization)
 
 ## Implementation Details
-This project extends Pezzza's original neural network implementation. Key features:
-- Three-node neural network architecture
-- Progressive learning approach
-- Real-time performance optimization
-- Comprehensive testing framework
-- Evolutionary architecture
+This project extends Pezzza's original neural network implementation with insights from his video series. Key features:
+
+### Neural Network Architecture
+- Three-node neural network design (input, hidden, output)
+- DAG-based representation for efficient processing
+- Compact network structure optimized for control tasks
+
+### Training Methodology
+- Progressive learning approach with increasing difficulty
+- Clear success metrics for evaluation
+- Temporal difference learning for improved performance
+- Evolutionary architecture that adapts over generations
+- Momentum-based backpropagation
+
+### Performance Optimization
+- Efficient weight matrix operations
+- Adaptive learning rate based on success rate
+- Network state persistence for continued training
+- Comprehensive checkpoint system
 
 ## License
 See [LICENSE](LICENSE) file for details.
