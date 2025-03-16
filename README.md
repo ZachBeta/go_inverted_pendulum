@@ -1,16 +1,17 @@
 # Go Inverted Pendulum Neural Network Implementation
 
-A Go-based framework implementing neural network control for the inverted pendulum problem, building directly on Pezzza's original approach with a focus on learning behaviors and performance.
+A Go-based framework implementing NEAT (NeuroEvolution of Augmenting Topologies) for the inverted pendulum problem, building directly on Pezzza's original approach with a focus on evolvable architectures and performance.
 
 ## Overview
 This project implements neural network control in Go, focusing on:
-- Neural network architecture with DAG-based representation
-- Three-node design (input, hidden, output layers)
-- Progressive learning with increasing difficulty
+- NEAT-based evolvable network architecture
+- DAG-based network representation
+- Progressive topology evolution
 - Temporal difference learning
 - Learned action space (-5N to +5N force control)
 - Real-time performance optimization
 - Environment simulation with accurate physics
+- Species diversity management
 
 ## Quick Start
 
@@ -54,7 +55,7 @@ go test ./...
 │   └── window/   # Window demo application (800x600)
 ├── internal/      # Private application code
 ├── pkg/          # Public library code
-│   ├── agent/    # Neural network agent implementations
+│   ├── agent/    # Neural network implementations
 │   ├── env/      # Environment definitions
 │   ├── policy/   # Learning policy implementations
 │   └── reward/   # Reward system (in progress)
@@ -84,22 +85,36 @@ For current project status and next steps, see [PROGRESS.md](docs/PROGRESS.md).
 This project extends Pezzza's original neural network implementation with insights from his video series. Key features:
 
 ### Neural Network Architecture
-- Three-node neural network design (input, hidden, output)
+- NEAT-based evolvable topology
+- Starting from minimal structure
+- Growing complexity through evolution
 - DAG-based representation for efficient processing
-- Compact network structure optimized for control tasks
+- Innovation number tracking
+- Species management for diversity
 
 ### Training Methodology
-- Progressive learning approach with increasing difficulty
+- Progressive learning with topology evolution
 - Clear success metrics for evaluation
-- Temporal difference learning for improved performance
-- Evolutionary architecture that adapts over generations
-- Momentum-based backpropagation
+- Temporal difference learning
+- Species-based fitness sharing
+- Adaptive mutation rates
+- Protection of innovation
 
 ### Performance Optimization
-- Efficient weight matrix operations
-- Adaptive learning rate based on success rate
-- Network state persistence for continued training
+- Efficient network processing
+- Species-parallel evaluation
+- Adaptive learning rates
+- Network state persistence
 - Comprehensive checkpoint system
+- Topology-aware processing
+
+### Evolution Features
+- Dynamic connection creation
+- Strategic node addition
+- Weight modification strategies
+- Innovation history tracking
+- Population management
+- Species diversity maintenance
 
 ## License
 See [LICENSE](LICENSE) file for details.
