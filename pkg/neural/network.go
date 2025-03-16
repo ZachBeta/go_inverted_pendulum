@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
+	"github.com/zachbeta/go_inverted_pendulum/pkg/metrics"
 )
 
 // Network implements a three-node architecture:
@@ -34,6 +35,13 @@ type Network struct {
 	
 	// Logger
 	logger *log.Logger
+	
+	// Metrics logger for performance tracking
+	metrics *metrics.Logger
+	
+	// Current episode and step tracking
+	currentEpisode int
+	currentStep    int
 }
 
 // NewNetwork creates a network with initialized weights
@@ -46,8 +54,12 @@ func NewNetwork() *Network {
 		lastInputs:      make([]float64, 2),
 		debug:           false, // Disable debug by default
 		logger:          log.Default(),
+		currentEpisode:  0,
+		currentStep:     0,
 	}
-	net.logger.Printf("[Network] Created new network with initial weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+	
+	// This console log remains as it's for initial creation and metrics logger isn't set yet
+	net.logger.Printf("[Network] Created new network with initial weights: angle=%.4f, angularVelWeight=%.4f, bias=%.4f\n",
 		net.angleWeight, net.angularVelWeight, net.bias)
 	return net
 }
@@ -62,6 +74,47 @@ func (n *Network) SetLogger(logger *log.Logger) {
 	n.logger = logger
 }
 
+// SetMetricsLogger sets the metrics logger for performance tracking
+func (n *Network) SetMetricsLogger(metricsLogger *metrics.Logger) {
+	n.metrics = metricsLogger
+	
+	// Configure metrics logger to use sparse console output
+	if metricsLogger != nil {
+		// Log to console only every 5 episodes and every 500 steps
+		metricsLogger.SetLogFrequency(5, 500)
+		
+		// Log initial weights to metrics database
+		metricsLogger.LogWeights(n.angleWeight, n.angularVelWeight, n.bias, n.learningRate)
+	}
+}
+
+// SetEpisode sets the current episode number
+func (n *Network) SetEpisode(episode int) {
+	n.currentEpisode = episode
+	n.currentStep = 0
+	
+	// Update metrics logger if available
+	if n.metrics != nil {
+		n.metrics.SetEpisode(episode)
+		// Log weights at the start of each episode to database
+		n.metrics.LogWeights(n.angleWeight, n.angularVelWeight, n.bias, n.learningRate)
+	} else if n.debug {
+		// Only log to console if no metrics logger and debug is enabled
+		n.logger.Printf("Starting episode %d with weights: angle=%.4f, angularVelWeight=%.4f, bias=%.4f, lr=%.4f",
+			episode, n.angleWeight, n.angularVelWeight, n.bias, n.learningRate)
+	}
+}
+
+// IncrementStep increments the current step counter
+func (n *Network) IncrementStep() {
+	n.currentStep++
+	
+	// Update metrics logger if available
+	if n.metrics != nil {
+		n.metrics.IncrementStep()
+	}
+}
+
 // Forward performs a forward pass through the network
 // Returns a force value in [-5, 5] Newtons
 func (n *Network) Forward(state env.State) float64 {
@@ -71,106 +124,101 @@ func (n *Network) Forward(state env.State) float64 {
 
 // ForwardWithActivation performs a forward pass and returns both the force and hidden layer activation
 func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
-	// Store inputs for weight updates
-	n.lastInputs[0] = state.AngleRadians
-	n.lastInputs[1] = state.AngularVel
-	
-	if n.debug {
-		n.logger.Printf("\n[Network Forward] State: angle=%.4f rad (%.1f°), angularVel=%.4f rad/s\n",
-			state.AngleRadians,
-			state.AngleRadians * 180 / math.Pi,
-			state.AngularVel)
-		n.logger.Printf("[Network Forward] Current weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
-			n.angleWeight, n.angularVelWeight, n.bias)
-	}
-
-	// Invert angle input so positive angle (falling right) generates negative force
-	angle := -state.AngleRadians * 5.0  // Scale angle for stronger response
-	angularVel := -state.AngularVel * 2.0  // Scale velocity for moderate response
-
-	// Simple linear combination through hidden node
-	hidden := n.angleWeight*angle +
-		n.angularVelWeight*angularVel +
-		n.bias
-	
-	if n.debug {
-		n.logger.Printf("[Network Forward] Scaled inputs: angle=%.4f, angularVel=%.4f\n", angle, angularVel)
-		n.logger.Printf("[Network Forward] Hidden activation: %.4f\n", hidden)
+	// Normalize angle to [-π, π] range
+	angle := math.Mod(state.AngleRadians, 2*math.Pi)
+	if angle > math.Pi {
+		angle -= 2 * math.Pi
+	} else if angle < -math.Pi {
+		angle += 2 * math.Pi
 	}
 	
-	// Hyperbolic tangent activation to bound output
-	// Maps hidden value to [-1, 1], then scale to [-5, 5]
-	n.lastForce = 5.0 * math.Tanh(hidden)
+	// Get angular velocity
+	velocity := state.AngularVel
 	
-	if n.debug {
-		n.logger.Printf("[Network Forward] Output force: %.4f N\n", n.lastForce)
+	// Compute hidden activation
+	hidden := n.angleWeight*angle + n.angularVelWeight*velocity + n.bias
+	
+	// Apply activation function (tanh)
+	activation := math.Tanh(hidden)
+	
+	// Scale to force range [-5, 5] Newtons
+	force := activation * 5.0
+	
+	// Store for learning
+	n.lastForce = force
+	n.lastInputs = []float64{angle, velocity}
+	
+	// Log metrics if available
+	if n.metrics != nil {
+		n.metrics.LogForwardPass(angle, velocity, force, hidden)
+	} else if n.debug {
+		// Only log to console if no metrics logger and debug is enabled
+		n.logger.Printf("Forward: angle=%.4f, velocity=%.4f → force=%.4f", angle, velocity, force)
 	}
-
-	return n.lastForce, hidden
+	
+	return force, hidden
 }
 
 // Predict estimates the value of a state for temporal difference learning
 // Returns a value in [-1, 1] representing the estimated "goodness" of the state
 func (n *Network) Predict(angleRadians, angularVel float64) float64 {
-	// Scale inputs as in Forward
-	angle := -angleRadians * 5.0
-	velocity := -angularVel * 2.0
-
-	// Compute hidden activation
-	hidden := n.angleWeight*angle +
-		n.angularVelWeight*velocity +
-		n.bias
-
-	// Store value for TD learning
-	n.lastValue = math.Tanh(hidden)
-
-	if n.debug {
-		n.logger.Printf("[Network Predict] State value: %.4f (angle=%.1f°, vel=%.2f)\n",
-			n.lastValue, angleRadians*180/math.Pi, angularVel)
+	// Normalize angle to [-π, π] range
+	angle := math.Mod(angleRadians, 2*math.Pi)
+	if angle > math.Pi {
+		angle -= 2 * math.Pi
+	} else if angle < -math.Pi {
+		angle += 2 * math.Pi
 	}
-
+	
+	// Compute hidden activation
+	hidden := n.angleWeight*angle + n.angularVelWeight*angularVel + n.bias
+	
+	// Apply activation function (tanh)
+	n.lastValue = math.Tanh(hidden)
+	
+	// Log prediction if metrics available
+	if n.metrics != nil {
+		n.metrics.LogPrediction(angle, angularVel, n.lastValue)
+	} else if n.debug {
+		// Only log to console if no metrics logger and debug is enabled
+		n.logger.Printf("Predict: angle=%.4f, velocity=%.4f → value=%.4f", angle, angularVel, n.lastValue)
+	}
+	
 	return n.lastValue
 }
 
 // Update adjusts weights based on the reward received
 // reward should be in [-1, 1] range
 func (n *Network) Update(reward float64) {
-	if n.debug {
-		n.logger.Printf("\n[Network Update] Received reward: %.4f\n", reward)
-		n.logger.Printf("[Network Update] Before weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
-			n.angleWeight, n.angularVelWeight, n.bias)
+	// Ensure we have previous inputs
+	if len(n.lastInputs) != 2 {
+		return
 	}
-
-	// Scale learning rate by reward magnitude
+	
+	// Extract last inputs
+	angle := n.lastInputs[0]
+	angularVel := n.lastInputs[1]
+	
+	// Compute update values
 	update := n.learningRate * reward
 	
-	// Get the sign of the last force once for consistency
-	forceSign := sign(n.lastForce)
+	// Compute weight updates
+	angleUpdate := update * angle
+	angularVelUpdate := update * angularVel
+	biasUpdate := update
 	
-	// Calculate weight updates
-	angleUpdate := update * n.lastInputs[0] * forceSign
-	angularVelUpdate := update * n.lastInputs[1] * forceSign
-	biasUpdate := update * forceSign
-
-	if n.debug {
-		n.logger.Printf("[Network Update] Updates: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
-			angleUpdate, angularVelUpdate, biasUpdate)
-	}
-	
-	// Update weights in direction that reinforces good actions
-	// and weakens bad actions
+	// Apply updates
 	n.angleWeight += angleUpdate
 	n.angularVelWeight += angularVelUpdate
 	n.bias += biasUpdate
 	
-	// Optional: Clip weights to prevent explosion
-	n.angleWeight = clip(n.angleWeight, -3.0, 3.0)     // Allow stronger angle response
-	n.angularVelWeight = clip(n.angularVelWeight, -2.0, 2.0)  // Keep velocity response moderate
-	n.bias = clip(n.bias, -1.0, 1.0)
-
-	if n.debug {
-		n.logger.Printf("[Network Update] After weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
-			n.angleWeight, n.angularVelWeight, n.bias)
+	// Log updates if metrics available
+	if n.metrics != nil {
+		n.metrics.LogUpdate(reward, angleUpdate, angularVelUpdate, biasUpdate)
+	} else if n.debug {
+		// Only log to console if no metrics logger and debug is enabled
+		n.logger.Printf("Update: reward=%.4f, updates=[%.4f, %.4f, %.4f]", 
+			reward, angleUpdate, angularVelUpdate, biasUpdate)
 	}
 }
 
@@ -185,24 +233,38 @@ func (n *Network) SetWeights(weights []float64) error {
 	if len(weights) != 3 {
 		return fmt.Errorf("expected 3 weights, got %d", len(weights))
 	}
-
-	if n.debug {
-		n.logger.Printf("\n[Network] Setting weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
-			weights[0], weights[1], weights[2])
-	}
-
+	
 	n.angleWeight = weights[0]
 	n.angularVelWeight = weights[1]
 	n.bias = weights[2]
+	
+	// Record new weights in metrics if available
+	if n.metrics != nil {
+		n.metrics.LogWeights(n.angleWeight, n.angularVelWeight, n.bias, n.learningRate)
+	} else if n.debug {
+		n.logger.Printf("[Network] Set weights: angle=%.4f, angularVelWeight=%.4f, bias=%.4f\n",
+			n.angleWeight, n.angularVelWeight, n.bias)
+	}
+	
 	return nil
 }
 
 // SetLearningRate updates the learning rate
 func (n *Network) SetLearningRate(rate float64) {
-	if n.debug {
-		n.logger.Printf("[Network] Setting learning rate: %.4f\n", rate)
-	}
+	oldRate := n.learningRate
 	n.learningRate = rate
+	
+	// Log learning rate change to database if metrics available
+	if n.metrics != nil {
+		// Log the learning rate change as a weight update
+		n.metrics.LogWeights(n.angleWeight, n.angularVelWeight, n.bias, rate)
+		
+		// Also log as a network operation for tracking system changes
+		metadata := fmt.Sprintf("Changed learning rate from %.4f to %.4f", oldRate, rate)
+		n.metrics.LogNetworkOperation("learning_rate_change", metadata, true)
+	} else if n.debug {
+		n.logger.Printf("[Network] Set learning rate: %.4f\n", rate)
+	}
 }
 
 // sign returns the sign of a number: 1 for positive, -1 for negative, 0 for zero
