@@ -23,6 +23,9 @@
   * [x] Performance benchmarks
 
 # Priority
+* source whitepapers on neural networks referenced in the video, things like NEAT and PPO and anything else evolutionary or reinforcement learning, and how to select populations, replication, modification, etc
+
+
 * Temporal Difference (TD) Learning
   * [ ] Enhanced Predict method for state value estimation
   * [ ] Momentum-based backpropagation

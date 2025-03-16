@@ -502,6 +502,159 @@ func calculateAverage(episodes []map[string]interface{}, field string) float64 {
 	return sum / float64(count)
 }
 
+// TestProgressiveLearningBehavior tests the progressive learning behavior of the network
+func TestProgressiveLearningBehavior(t *testing.T) {
+	network := NewNetwork()
+	
+	// Test sequence of increasingly challenging states
+	states := []struct {
+		state  env.State
+		reward float64
+		desc   string
+	}{
+		{
+			state:  env.State{AngleRadians: 0.1, AngularVel: 0.2},
+			reward: 0.8,
+			desc:   "Small angle correction",
+		},
+		{
+			state:  env.State{AngleRadians: 0.3, AngularVel: 0.4},
+			reward: 0.5,
+			desc:   "Medium angle correction",
+		},
+		{
+			state:  env.State{AngleRadians: 0.5, AngularVel: 0.6},
+			reward: 0.2,
+			desc:   "Large angle correction",
+		},
+	}
+	
+	// Track learning progress
+	var prevValue float64
+	for i, tc := range states {
+		// Get network's prediction before update
+		initialValue := network.Predict(tc.state.AngleRadians, tc.state.AngularVel)
+		
+		// Perform forward pass and update
+		network.Forward(tc.state) // Force used internally for weight updates
+		network.Update(tc.reward)
+		
+		// Get prediction after update
+		newValue := network.Predict(tc.state.AngleRadians, tc.state.AngularVel)
+		
+		// For non-first states, check learning progression
+		if i > 0 {
+			valueDiff := newValue - prevValue
+			if valueDiff <= 0 {
+				t.Errorf("%s: Learning did not progress (value diff: %.4f)", tc.desc, valueDiff)
+			}
+		}
+		prevValue = newValue
+		
+		// Verify value improved after update
+		if newValue <= initialValue {
+			t.Errorf("%s: Value did not improve after update (before: %.4f, after: %.4f)", 
+				tc.desc, initialValue, newValue)
+		}
+	}
+}
+
+// TestTemporalDifferencePrediction tests the temporal difference prediction of the network
+func TestTemporalDifferencePrediction(t *testing.T) {
+	network := NewNetwork()
+	
+	// Test TD prediction accuracy
+	scenarios := []struct {
+		current     env.State
+		next        env.State
+		reward      float64
+		wantBetter  bool
+		desc        string
+	}{
+		{
+			current:    env.State{AngleRadians: 0.3, AngularVel: 0.4},
+			next:       env.State{AngleRadians: 0.2, AngularVel: 0.3},
+			reward:     0.7,
+			wantBetter: true,
+			desc:       "Improving state",
+		},
+		{
+			current:    env.State{AngleRadians: 0.1, AngularVel: 0.2},
+			next:       env.State{AngleRadians: 0.2, AngularVel: 0.3},
+			reward:     -0.3,
+			wantBetter: false,
+			desc:       "Worsening state",
+		},
+	}
+	
+	for _, tc := range scenarios {
+		// Get prediction for current state
+		currentValue := network.Predict(tc.current.AngleRadians, tc.current.AngularVel)
+		
+		// Get prediction for next state
+		nextValue := network.Predict(tc.next.AngleRadians, tc.next.AngularVel)
+		
+		if tc.wantBetter && nextValue <= currentValue {
+			t.Errorf("%s: Next state value (%.4f) not better than current (%.4f)", 
+				tc.desc, nextValue, currentValue)
+		} else if !tc.wantBetter && nextValue >= currentValue {
+			t.Errorf("%s: Next state value (%.4f) not worse than current (%.4f)", 
+				tc.desc, nextValue, currentValue)
+		}
+	}
+}
+
+// TestMomentumLearning tests the momentum learning of the network
+func TestMomentumLearning(t *testing.T) {
+	network := NewNetwork()
+	
+	// Test consistent learning direction maintains momentum
+	states := []env.State{
+		{AngleRadians: 0.4, AngularVel: 0.5},
+		{AngleRadians: 0.3, AngularVel: 0.4},
+		{AngleRadians: 0.2, AngularVel: 0.3},
+	}
+	
+	var prevWeights []float64
+	var prevDelta float64
+	
+	for i, state := range states {
+		initialWeights := network.GetWeights()
+		network.Forward(state) // Force used internally for weight updates
+		network.Update(0.8) // Consistent positive reward
+		newWeights := network.GetWeights()
+		
+		// Calculate weight change magnitude
+		var delta float64
+		for j := range newWeights {
+			delta += math.Abs(newWeights[j] - initialWeights[j])
+		}
+		
+		if i > 0 {
+			// Check if weight updates maintain direction
+			sameDirection := true
+			for j := range newWeights {
+				if (newWeights[j] - initialWeights[j]) * (initialWeights[j] - prevWeights[j]) <= 0 {
+					sameDirection = false
+					break
+				}
+			}
+			
+			if !sameDirection {
+				t.Error("Weight updates changed direction despite consistent rewards")
+			}
+			
+			// Check if updates maintain or increase magnitude (momentum)
+			if delta < prevDelta {
+				t.Errorf("Update magnitude decreased: prev=%.4f, current=%.4f", prevDelta, delta)
+			}
+		}
+		
+		prevWeights = initialWeights
+		prevDelta = delta
+	}
+}
+
 // TestProgressiveLearningAdaptation verifies that the network adapts its learning
 // based on state complexity
 func TestProgressiveLearningAdaptation(t *testing.T) {
@@ -618,4 +771,107 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// TestMomentumBackpropagation tests the momentum backpropagation
+func TestMomentumBackpropagation(t *testing.T) {
+	network := NewNetwork()
+	
+	// Test sequence of updates with momentum
+	states := []env.State{
+		{AngleRadians: 0.2, AngularVel: 0.3},
+		{AngleRadians: 0.15, AngularVel: 0.2},
+		{AngleRadians: 0.1, AngularVel: 0.1},
+	}
+	
+	var prevDelta float64
+	for i, state := range states {
+		force := network.Forward(state)
+		delta := network.Update(0.8) // Positive reward for improvement
+		
+		if i > 0 {
+			// Momentum should cause larger updates in consistent direction
+			if math.Abs(delta) <= math.Abs(prevDelta) {
+				t.Errorf("Momentum not increasing update magnitude: prev=%v, current=%v", prevDelta, delta)
+			}
+		}
+		prevDelta = delta
+	}
+}
+
+// TestAdaptiveLearningRate tests the adaptive learning rate
+func TestAdaptiveLearningRate(t *testing.T) {
+	network := NewNetwork()
+	successRates := []float64{0.2, 0.4, 0.6, 0.8}
+	
+	var prevLearningRate float64
+	for _, rate := range successRates {
+		network.UpdateSuccessRate(rate)
+		currentRate := network.GetLearningRate()
+		
+		if rate > 0.5 && currentRate <= prevLearningRate {
+			t.Errorf("Learning rate should increase with high success: prev=%v, current=%v", prevLearningRate, currentRate)
+		}
+		prevLearningRate = currentRate
+	}
+}
+
+// TestStateTransitionQuality tests the state transition quality
+func TestStateTransitionQuality(t *testing.T) {
+	network := NewNetwork()
+	
+	transitions := []struct {
+		initial env.State
+		action float64
+		final  env.State
+		expectedQuality float64
+	}{
+		{
+			initial: env.State{AngleRadians: 0.3, AngularVel: 0.4},
+			action: -2.0,
+			final: env.State{AngleRadians: 0.2, AngularVel: 0.3},
+			expectedQuality: 0.8,
+		},
+		{
+			initial: env.State{AngleRadians: 0.2, AngularVel: 0.3},
+			action: -1.5,
+			final: env.State{AngleRadians: 0.1, AngularVel: 0.2},
+			expectedQuality: 0.9,
+		},
+	}
+	
+	for _, tr := range transitions {
+		quality := network.EvaluateTransition(tr.initial, tr.action, tr.final)
+		if math.Abs(quality - tr.expectedQuality) > 0.2 {
+			t.Errorf("Transition quality mismatch: got=%v, want=%v", quality, tr.expectedQuality)
+		}
+	}
+}
+
+// TestLongTermStability tests the long-term stability
+func TestLongTermStability(t *testing.T) {
+	network := NewNetwork()
+	const episodes = 100
+	
+	var totalReward float64
+	var prevAvgReward float64
+	
+	for i := 0; i < episodes; i++ {
+		state := env.State{
+			AngleRadians: 0.1 * math.Sin(float64(i)),
+			AngularVel: 0.1 * math.Cos(float64(i)),
+		}
+		
+		force := network.Forward(state)
+		reward := -math.Abs(state.AngleRadians) // Reward staying vertical
+		network.Update(reward)
+		
+		totalReward += reward
+		avgReward := totalReward / float64(i+1)
+		
+		if i > episodes/2 && avgReward < prevAvgReward {
+			t.Errorf("Learning stability degraded: prev_avg=%v, current_avg=%v", prevAvgReward, avgReward)
+		}
+		prevAvgReward = avgReward
+	}
 }
