@@ -5,6 +5,7 @@ package neural
 
 import (
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/zachbeta/go_inverted_pendulum/pkg/env"
@@ -30,6 +31,9 @@ type Network struct {
 
 	// Debug flag
 	debug bool
+	
+	// Logger
+	logger *log.Logger
 }
 
 // NewNetwork creates a network with initialized weights
@@ -40,9 +44,10 @@ func NewNetwork() *Network {
 		bias:            0.0,  // Start with no bias
 		learningRate:    0.05, // Learning rate for quick adaptation
 		lastInputs:      make([]float64, 2),
-		debug:           true, // Enable debug by default
+		debug:           false, // Disable debug by default
+		logger:          log.Default(),
 	}
-	fmt.Printf("[Network] Created new network with initial weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+	net.logger.Printf("[Network] Created new network with initial weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
 		net.angleWeight, net.angularVelWeight, net.bias)
 	return net
 }
@@ -50,6 +55,11 @@ func NewNetwork() *Network {
 // SetDebug enables or disables debug printing
 func (n *Network) SetDebug(enabled bool) {
 	n.debug = enabled
+}
+
+// SetLogger sets the logger for this network
+func (n *Network) SetLogger(logger *log.Logger) {
+	n.logger = logger
 }
 
 // Forward performs a forward pass through the network
@@ -66,11 +76,11 @@ func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 	n.lastInputs[1] = state.AngularVel
 	
 	if n.debug {
-		fmt.Printf("\n[Network Forward] State: angle=%.4f rad (%.1f°), angularVel=%.4f rad/s\n",
+		n.logger.Printf("\n[Network Forward] State: angle=%.4f rad (%.1f°), angularVel=%.4f rad/s\n",
 			state.AngleRadians,
 			state.AngleRadians * 180 / math.Pi,
 			state.AngularVel)
-		fmt.Printf("[Network Forward] Current weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+		n.logger.Printf("[Network Forward] Current weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
 			n.angleWeight, n.angularVelWeight, n.bias)
 	}
 
@@ -84,8 +94,8 @@ func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 		n.bias
 	
 	if n.debug {
-		fmt.Printf("[Network Forward] Scaled inputs: angle=%.4f, angularVel=%.4f\n", angle, angularVel)
-		fmt.Printf("[Network Forward] Hidden activation: %.4f\n", hidden)
+		n.logger.Printf("[Network Forward] Scaled inputs: angle=%.4f, angularVel=%.4f\n", angle, angularVel)
+		n.logger.Printf("[Network Forward] Hidden activation: %.4f\n", hidden)
 	}
 	
 	// Hyperbolic tangent activation to bound output
@@ -93,7 +103,7 @@ func (n *Network) ForwardWithActivation(state env.State) (float64, float64) {
 	n.lastForce = 5.0 * math.Tanh(hidden)
 	
 	if n.debug {
-		fmt.Printf("[Network Forward] Output force: %.4f N\n", n.lastForce)
+		n.logger.Printf("[Network Forward] Output force: %.4f N\n", n.lastForce)
 	}
 
 	return n.lastForce, hidden
@@ -115,7 +125,7 @@ func (n *Network) Predict(angleRadians, angularVel float64) float64 {
 	n.lastValue = math.Tanh(hidden)
 
 	if n.debug {
-		fmt.Printf("[Network Predict] State value: %.4f (angle=%.1f°, vel=%.2f)\n",
+		n.logger.Printf("[Network Predict] State value: %.4f (angle=%.1f°, vel=%.2f)\n",
 			n.lastValue, angleRadians*180/math.Pi, angularVel)
 	}
 
@@ -126,8 +136,8 @@ func (n *Network) Predict(angleRadians, angularVel float64) float64 {
 // reward should be in [-1, 1] range
 func (n *Network) Update(reward float64) {
 	if n.debug {
-		fmt.Printf("\n[Network Update] Received reward: %.4f\n", reward)
-		fmt.Printf("[Network Update] Before weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
+		n.logger.Printf("\n[Network Update] Received reward: %.4f\n", reward)
+		n.logger.Printf("[Network Update] Before weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
 			n.angleWeight, n.angularVelWeight, n.bias)
 	}
 
@@ -143,7 +153,7 @@ func (n *Network) Update(reward float64) {
 	biasUpdate := update * forceSign
 
 	if n.debug {
-		fmt.Printf("[Network Update] Updates: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+		n.logger.Printf("[Network Update] Updates: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
 			angleUpdate, angularVelUpdate, biasUpdate)
 	}
 	
@@ -159,7 +169,7 @@ func (n *Network) Update(reward float64) {
 	n.bias = clip(n.bias, -1.0, 1.0)
 
 	if n.debug {
-		fmt.Printf("[Network Update] After weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
+		n.logger.Printf("[Network Update] After weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n", 
 			n.angleWeight, n.angularVelWeight, n.bias)
 	}
 }
@@ -177,7 +187,7 @@ func (n *Network) SetWeights(weights []float64) error {
 	}
 
 	if n.debug {
-		fmt.Printf("\n[Network] Setting weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
+		n.logger.Printf("\n[Network] Setting weights: angle=%.4f, angularVel=%.4f, bias=%.4f\n",
 			weights[0], weights[1], weights[2])
 	}
 
@@ -190,7 +200,7 @@ func (n *Network) SetWeights(weights []float64) error {
 // SetLearningRate updates the learning rate
 func (n *Network) SetLearningRate(rate float64) {
 	if n.debug {
-		fmt.Printf("[Network] Setting learning rate: %.4f\n", rate)
+		n.logger.Printf("[Network] Setting learning rate: %.4f\n", rate)
 	}
 	n.learningRate = rate
 }
@@ -199,8 +209,7 @@ func (n *Network) SetLearningRate(rate float64) {
 func sign(x float64) float64 {
 	if x > 0 {
 		return 1.0
-	}
-	if x < 0 {
+	} else if x < 0 {
 		return -1.0
 	}
 	return 0.0

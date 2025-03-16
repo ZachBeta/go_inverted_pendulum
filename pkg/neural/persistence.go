@@ -42,7 +42,7 @@ func (n *Network) SaveToFile(path string) error {
 	}
 
 	if n.debug {
-		fmt.Printf("[Network] Saved network state to %s\n", path)
+		n.logger.Printf("[Network] Saved network state to %s", path)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (n *Network) LoadFromFile(path string) error {
 	n.SetLearningRate(state.LearningRate)
 
 	if n.debug {
-		fmt.Printf("[Network] Loaded network state from %s (saved at %s)\n", 
+		n.logger.Printf("[Network] Loaded network state from %s (saved at %s)", 
 			path, state.SaveTime)
 	}
 	return nil
