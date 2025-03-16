@@ -21,6 +21,7 @@
     * Implement success metrics for performance evaluation
 
 # next
+* [ ] fix linter and deprecation warnings
 * [ ] Enhance neural network architecture based on video insights
     * Implement DAG-based representation (Directed Acyclic Graphs)
     * Ensure proper three-node design (input, hidden, output layers)

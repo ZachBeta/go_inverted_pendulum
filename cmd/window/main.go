@@ -138,6 +138,9 @@ func (g *Game) Update() error {
 	
 	// Add experience to trainer
 	g.trainer.AddExperience(experience)
+	
+	// Update drawer with latest training stats
+	g.drawer.UpdateTrainingStats(g.trainer)
 
 	if err != nil {
 		g.logger.Printf("Episode %d ended after %d ticks with error: %v\n", 
@@ -169,7 +172,7 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.drawer.Draw(screen, g.pendulum, g.network, g.episodes, g.ticks, g.maxTicks, g.lastHiddenActivation)
+	g.drawer.Draw(screen, g.pendulum, g.network, g.trainer, g.episodes, g.ticks, g.maxTicks, g.lastHiddenActivation)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
