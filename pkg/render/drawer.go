@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	ScreenWidth  = 800
-	ScreenHeight = 600
+	ScreenWidth  = 1024
+	ScreenHeight = 768
 	Scale       = 100.0 // pixels per meter
 	
 	// Network visualization constants
